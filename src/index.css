@@ -1,0 +1,275 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 350 15% 98%;
+    --foreground: 340 25% 8%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 340 25% 8%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 340 25% 8%;
+
+    --primary: 75 30% 50%;
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 345 20% 95%;
+    --secondary-foreground: 340 25% 15%;
+
+    --muted: 345 15% 94%;
+    --muted-foreground: 340 15% 55%;
+
+    --accent: 75 35% 55%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 345 20% 88%;
+    --input: 345 20% 88%;
+    --ring: 75 30% 50%;
+
+    --radius: 0.75rem;
+    
+    /* Fresh juice store specific colors */
+    --luxury: 75 30% 50%;
+    --luxury-foreground: 0 0% 98%;
+    --gold: 45 90% 55%;
+    --gold-foreground: 75 30% 8%;
+    --elegant: 75 20% 25%;
+    --elegant-foreground: 0 0% 98%;
+    
+    /* Gradients */
+    --gradient-luxury: linear-gradient(135deg, hsl(75 30% 50%), hsl(75 35% 55%));
+    --gradient-elegant: linear-gradient(135deg, hsl(75 20% 25%), hsl(75 25% 15%));
+    --gradient-subtle: linear-gradient(180deg, hsl(75 15% 98%), hsl(75 20% 95%));
+    --gradient-header: linear-gradient(135deg, hsl(0 0% 100%), hsl(0 0% 96%), hsl(75 30% 92%));
+    --gradient-footer: linear-gradient(135deg, hsl(0 0% 96%), hsl(0 0% 94%), hsl(75 20% 88%));
+    
+    /* Shadows */
+    --shadow-luxury: 0 10px 30px -10px hsl(75 30% 50% / 0.3);
+    --shadow-elegant: 0 20px 40px -15px hsl(75 20% 25% / 0.25);
+    --shadow-soft: 0 4px 20px -8px hsl(75 25% 8% / 0.1);
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 340 25% 8%;
+    --foreground: 350 15% 98%;
+
+    --card: 340 20% 12%;
+    --card-foreground: 350 15% 98%;
+
+    --popover: 340 20% 12%;
+    --popover-foreground: 350 15% 98%;
+
+    --primary: 75 35% 60%;
+    --primary-foreground: 75 25% 8%;
+
+    --secondary: 340 15% 18%;
+    --secondary-foreground: 350 15% 90%;
+
+    --muted: 340 15% 18%;
+    --muted-foreground: 340 10% 70%;
+
+    --accent: 75 40% 65%;
+    --accent-foreground: 75 25% 8%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 340 15% 20%;
+    --input: 340 15% 20%;
+    --ring: 75 35% 60%;
+    
+    /* Dark mode gradients */
+    --gradient-luxury: linear-gradient(135deg, hsl(75 35% 60%), hsl(75 40% 65%));
+    --gradient-elegant: linear-gradient(135deg, hsl(75 15% 15%), hsl(75 20% 12%));
+    --gradient-subtle: linear-gradient(180deg, hsl(75 25% 8%), hsl(75 20% 12%));
+    --gradient-header: linear-gradient(135deg, hsl(75 20% 15%), hsl(75 40% 25%), hsl(75 50% 35%));
+    
+    /* Dark mode shadows */
+    --shadow-luxury: 0 10px 30px -10px hsl(75 35% 60% / 0.4);
+    --shadow-elegant: 0 20px 40px -15px hsl(0 0% 0% / 0.5);
+    --shadow-soft: 0 4px 20px -8px hsl(0 0% 0% / 0.3);
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-inter;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-playfair;
+  }
+}
+
+@layer components {
+  .gradient-luxury {
+    background: var(--gradient-luxury);
+  }
+  
+  .gradient-elegant {
+    background: var(--gradient-elegant);
+  }
+  
+  .gradient-subtle {
+    background: var(--gradient-subtle);
+  }
+  
+  .gradient-header {
+    background: var(--gradient-header);
+  }
+  
+  .gradient-footer {
+    background: var(--gradient-footer);
+  }
+  
+  .shadow-luxury {
+    box-shadow: var(--shadow-luxury);
+  }
+  
+  .shadow-elegant {
+    box-shadow: var(--shadow-elegant);
+  }
+  
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+}
+
+@keyframes announcement-slide {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes announcement-pulse {
+  0% {
+    transform: scale(0.96);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.02);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.96);
+    opacity: 0.85;
+  }
+}
+
+@keyframes announcement-alert {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@layer utilities {
+  .announcement-slide {
+    animation: announcement-slide 18s linear infinite;
+    will-change: transform;
+  }
+
+  .announcement-pulse {
+    animation: announcement-pulse 1.8s ease-in-out infinite;
+  }
+
+  .announcement-alert {
+    animation: announcement-alert 1s ease-in-out infinite;
+  }
+
+  .rich-text-editor:focus {
+    outline: none;
+  }
+
+  .rich-text-editor[contenteditable="true"]:empty:before {
+    content: attr(data-placeholder);
+    color: hsl(var(--muted-foreground));
+    pointer-events: none;
+  }
+
+  .rich-text-editor p {
+    margin-bottom: 0.5rem;
+  }
+
+  .rich-text-editor ul,
+  .rich-text-editor ol {
+    margin-left: 1.25rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .rich-text-editor ul {
+    list-style-type: disc;
+  }
+
+  .rich-text-editor ol {
+    list-style-type: decimal;
+  }
+
+  .rich-text-editor b,
+  .rich-text-editor strong {
+    font-weight: 600;
+  }
+
+  .rich-text-content p {
+    margin-bottom: 0.75rem;
+    line-height: 1.6;
+  }
+
+  .rich-text-content ul,
+  .rich-text-content ol {
+    margin-left: 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .rich-text-content ul {
+    list-style: disc;
+  }
+
+  .rich-text-content ol {
+    list-style: decimal;
+  }
+}

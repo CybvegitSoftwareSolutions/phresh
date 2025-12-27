@@ -1,0 +1,177 @@
+// Edge Functions bundle file
+// Copy each block into a file under supabase/functions/<function-name>/index.ts
+
+// ===============================
+// Function: dynamic-processor
+// Path: supabase/functions/dynamic-processor/index.ts
+// Description: Handles Contact Us submissions with CORS + IP capture.
+// ===============================
+import { serve as serveDynamic } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient as createDynamicClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsDynamic = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+type DynamicBody = {
+  name: string;
+  email: string;
+  message: string;
+};
+
+serveDynamic(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsDynamic });
+  }
+
+  try {
+    if (req.method !== "POST") {
+      return new Response(JSON.stringify({ error: "method_not_allowed" }), {
+        status: 405,
+        headers: { "Content-Type": "application/json", ...corsDynamic },
+      });
+    }
+
+    const body = (await req.json()) as DynamicBody;
+    if (!body?.name || !body?.email || !body?.message) {
+      return new Response(JSON.stringify({ error: "missing_fields" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsDynamic },
+      });
+    }
+
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const client = createDynamicClient(SUPABASE_URL, SERVICE_ROLE);
+
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+      req.headers.get("x-real-ip") ||
+      req.headers.get("cf-connecting-ip") ||
+      null;
+
+    const { error } = await client.from("contact_queries").insert({
+      name: body.name,
+      email: body.email,
+      message: body.message,
+      ip_address: ip,
+    });
+    if (error) throw error;
+
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", ...corsDynamic },
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: String(e?.message || e) }), {
+      status: 500,
+      headers: { "Content-Type": "application/json", ...corsDynamic },
+    });
+  }
+});
+
+// ===============================
+// Function: corporate-processor
+// Path: supabase/functions/corporate-processor/index.ts
+// Description: Handles Corporate Order submissions with CORS + IP capture.
+// ===============================
+import { serve as serveCorporate } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient as createCorporateClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsCorporate = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+type CorporateBody = {
+  name: string;
+  email: string;
+  phone: string;
+  organization_name: string;
+  purposes: string[];
+  other_purpose?: string | null;
+  address?: string | null;
+  scents_required: string;
+};
+
+serveCorporate(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsCorporate });
+  }
+
+  try {
+    if (req.method !== "POST") {
+      return new Response(JSON.stringify({ error: "method_not_allowed" }), {
+        status: 405,
+        headers: { "Content-Type": "application/json", ...corsCorporate },
+      });
+    }
+
+    const body = (await req.json()) as CorporateBody;
+    if (
+      !body?.name ||
+      !body?.email ||
+      !body?.phone ||
+      !body?.organization_name ||
+      !body?.purposes?.length ||
+      !body?.scents_required
+    ) {
+      return new Response(JSON.stringify({ error: "missing_fields" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsCorporate },
+      });
+    }
+
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const client = createCorporateClient(SUPABASE_URL, SERVICE_ROLE);
+
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+      req.headers.get("x-real-ip") ||
+      req.headers.get("cf-connecting-ip") ||
+      null;
+
+    const { error } = await client.from("corporate_orders").insert({
+      name: body.name,
+      email: body.email,
+      phone: body.phone,
+      organization_name: body.organization_name,
+      purposes: body.purposes,
+      other_purpose: body.other_purpose ?? null,
+      address: body.address ?? null,
+      scents_required: body.scents_required,
+      ip_address: ip,
+    });
+    if (error) throw error;
+
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", ...corsCorporate },
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: String(e?.message || e) }), {
+      status: 500,
+      headers: { "Content-Type": "application/json", ...corsCorporate },
+    });
+  }
+});
+
+// Deployment notes
+// - Add to supabase/config.toml:
+//   [functions.dynamic-processor]
+//   verify_jwt = false
+//   [functions.corporate-processor]
+//   verify_jwt = false
+// - Set secrets (Dashboard or CLI):
+//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+// - Deploy:
+//   supabase functions deploy dynamic-processor
+//   supabase functions deploy corporate-processor
+// - CORS preflight test:
+//   curl -i -X OPTIONS https://<project>.supabase.co/functions/v1/dynamic-processor
+//   curl -i -X OPTIONS https://<project>.supabase.co/functions/v1/corporate-processor
+
