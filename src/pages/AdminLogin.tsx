@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,9 +8,10 @@ import { Shield, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/components/ui/use-toast";
 import { useNavigate } from "react-router-dom";
+import { apiService } from "@/services/api";
 
 export const AdminLogin = () => {
-  const { signIn, signOut } = useAuth();
+  const { signIn, signOut, user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -19,6 +20,13 @@ export const AdminLogin = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Redirect if already logged in as admin
+  useEffect(() => {
+    if (user && user.role === 'admin') {
+      navigate('/admin-dashboard', { replace: true });
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,64 +41,51 @@ export const AdminLogin = () => {
       
       if (signInError) {
         console.error('Sign in error:', signInError);
-        if (signInError.message === "Invalid login credentials") {
-          setError("Invalid email or password. If this is your first time, please check your email for a password setup link.");
-        } else {
-          setError(signInError.message);
-        }
+        const errorMessage = typeof signInError === 'string' ? signInError : (signInError.message || "Invalid email or password. Please try again.");
+        setError(errorMessage);
         setLoading(false);
         return;
       }
 
-      // Wait a moment for auth state to settle, then check admin status
+      // Wait a moment for auth state to update, then check admin status
       setTimeout(async () => {
         try {
-          // Get the current user from localStorage token
-          const token = localStorage.getItem('jwt_token');
-          if (!token) {
+          // Get userId from localStorage (stored during login) or from user state
+          const userId = localStorage.getItem('user_id') || user?._id;
+          // Get user profile using apiService
+          const profileResponse = await apiService.getProfile(userId || undefined);
+          
+          if (!profileResponse.success || !profileResponse.data) {
             setError("Authentication failed. Please try again.");
             setLoading(false);
+            await signOut();
             return;
           }
 
-          // Make API call to get user profile
-          const response = await fetch('/api/auth/profile', {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          });
-
-          if (!response.ok) {
-            setError("Authentication failed. Please try again.");
-            setLoading(false);
-            return;
-          }
-
-          const userData = await response.json();
+          const userData = profileResponse.data;
           console.log('Admin check - User data:', userData);
 
-          if (userData.success && userData.data?.role === 'admin') {
+          if (userData.role === 'admin') {
             console.log('User is admin, redirecting to dashboard');
             toast({
               title: "Admin Login Successful",
               description: "Welcome to the admin dashboard!"
             });
-            // Force a complete page navigation to ensure auth state is properly set
-            window.location.replace('/admin-dashboard');
+            // Use window.location for admin redirect to ensure clean state
+            window.location.href = '/admin-dashboard';
           } else {
             console.log('User is not admin, signing out');
             await signOut();
             setError("Access Denied: This account does not have admin privileges.");
             setLoading(false);
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error('Error checking admin status:', error);
           await signOut();
           setError("Error verifying admin status. Please try again.");
           setLoading(false);
         }
-      }, 1000); // Give auth state more time to settle
+      }, 500); // Reduced timeout since we're using apiService
       
     } catch (error: any) {
       console.error('Login error:', error);

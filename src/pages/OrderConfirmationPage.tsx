@@ -421,26 +421,39 @@ export const OrderConfirmationPage = () => {
                       || item.product.image_url 
                       || "/api/placeholder/80/80";
                     
+                    const unitPrice = Number(itemPrice);
+                    const itemTotal = unitPrice * item.quantity;
+                    
                     return (
-                      <div key={item._id} className="flex items-start gap-4">
+                      <div key={item._id} className="flex items-start gap-4 pb-4 border-b last:border-b-0 last:pb-0">
                         <img
                           src={primaryImage}
                           alt={item.product.name}
                           className="h-16 w-16 rounded border object-cover"
                         />
-                        <div className="flex-1 space-y-1">
-                          <h4 className="font-medium leading-snug">{item.product.name}</h4>
+                        <div className="flex-1">
+                          <h4 className="font-medium leading-snug mb-1">{item.product.name}</h4>
                           {item.variant?.name || item.variant_size ? (
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-xs text-muted-foreground mb-2">
                               Size: {item.variant?.name || item.variant_size}
                             </p>
                           ) : null}
-                          <p className="text-sm text-muted-foreground">
-                            {item.quantity} × {formatCurrency(itemPrice)}
-                          </p>
-                          <p className="font-semibold">
-                            {formatCurrency(Number(itemPrice) * item.quantity)}
-                          </p>
+                          <div className="flex items-center justify-between mt-2">
+                            <div className="space-y-1">
+                              <p className="text-sm text-muted-foreground">
+                                Unit Price: <span className="font-medium text-foreground">{formatCurrency(unitPrice)}</span>
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                Quantity: <span className="font-medium text-foreground">{item.quantity}</span>
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm text-muted-foreground mb-1">Total</p>
+                              <p className="font-semibold text-lg text-emerald-600">
+                                {formatCurrency(itemTotal)}
+                              </p>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     );

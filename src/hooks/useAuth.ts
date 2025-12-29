@@ -34,17 +34,40 @@ export const useAuth = () => {
 
   const loadUserProfile = async () => {
     try {
-      const response = await apiService.getProfile();
+      // Try to get userId from localStorage first
+      let userId = localStorage.getItem('user_id');
+      
+      // If not in localStorage, try to decode from JWT token
+      if (!userId) {
+        const token = localStorage.getItem('jwt_token');
+        if (token) {
+          try {
+            // Decode JWT to get userId (JWT payload is base64 encoded)
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            userId = payload.id;
+          } catch (e) {
+            console.warn('Failed to decode JWT token:', e);
+          }
+        }
+      }
+      
+      const response = await apiService.getProfile(userId || undefined);
       if (response.success && response.data) {
         setUser(response.data);
+        // Store userId for future use
+        if (response.data._id) {
+          localStorage.setItem('user_id', response.data._id);
+        }
       } else {
         // Token might be invalid, clear it
         localStorage.removeItem('jwt_token');
+        localStorage.removeItem('user_id');
         setUser(null);
       }
     } catch (error) {
       console.error('Failed to load user profile:', error);
       localStorage.removeItem('jwt_token');
+      localStorage.removeItem('user_id');
       setUser(null);
     } finally {
       setLoading(false);
@@ -61,7 +84,12 @@ export const useAuth = () => {
       });
 
       if (response.success) {
-        setUser(response.data.user);
+        const newUser = response.data.user;
+        setUser(newUser);
+        // Store userId in localStorage for profile loading
+        if (newUser._id) {
+          localStorage.setItem('user_id', newUser._id);
+        }
         toast({
           title: "Account created",
           description: "Welcome to Phresh! Your account has been created successfully.",
@@ -90,7 +118,30 @@ export const useAuth = () => {
       const response = await apiService.login({ email, password });
 
       if (response.success) {
-        setUser(response.data.user);
+        // Set user from login response (includes role)
+        const loginUser = response.data.user;
+        setUser(loginUser);
+        
+        // Store userId in localStorage for profile loading
+        if (loginUser._id) {
+          localStorage.setItem('user_id', loginUser._id);
+        }
+        
+        // Reload profile to ensure we have complete user data, but preserve role from login
+        try {
+          const profileResponse = await apiService.getProfile(loginUser._id);
+          if (profileResponse.success && profileResponse.data) {
+            // Ensure role is preserved (use login role if profile doesn't have it)
+            setUser({
+              ...profileResponse.data,
+              role: profileResponse.data.role || loginUser.role
+            });
+          }
+        } catch (profileError) {
+          // If profile load fails, keep the user from login response
+          console.warn('Failed to load profile after login, using login data:', profileError);
+        }
+        
         toast({
           title: "Welcome back",
           description: "You're now signed in to Phresh.",
@@ -118,16 +169,29 @@ export const useAuth = () => {
     try {
       await apiService.logout();
       setUser(null);
+      localStorage.removeItem('jwt_token');
+      localStorage.removeItem('user_id');
       toast({
         title: "Signed out",
         description: "You have been signed out successfully."
       });
+      // Redirect to home page if on admin pages
+      if (window.location.pathname.startsWith('/admin')) {
+        window.location.href = '/';
+      }
     } catch (error: any) {
+      // Even if logout API fails, clear local state and redirect
+      setUser(null);
+      localStorage.removeItem('jwt_token');
+      localStorage.removeItem('user_id');
       toast({
-        title: "Sign out failed",
-        description: error.message || "Failed to sign out. Please try again.",
-        variant: "destructive"
+        title: "Signed out",
+        description: "You have been signed out successfully."
       });
+      // Redirect to home page if on admin pages
+      if (window.location.pathname.startsWith('/admin')) {
+        window.location.href = '/';
+      }
     }
   };
 
@@ -246,7 +310,12 @@ export const useAuth = () => {
     try {
       const response = await apiService.verifyOtp(fullName, email, password, otp);
       if (response.success) {
-        setUser(response.data.user);
+        const newUser = response.data.user;
+        setUser(newUser);
+        // Store userId in localStorage for profile loading
+        if (newUser._id) {
+          localStorage.setItem('user_id', newUser._id);
+        }
         toast({
           title: "Account created",
           description: "Welcome to Phresh! Your account has been created successfully.",

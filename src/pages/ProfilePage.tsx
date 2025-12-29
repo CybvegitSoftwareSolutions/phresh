@@ -126,8 +126,10 @@ export const ProfilePage = () => {
     try {
       if (user) {
         // Authenticated user: load full profile
+        // Get userId from user state or localStorage
+        const userId = user._id || localStorage.getItem('user_id');
         // Load user profile
-        const profileResponse = await apiService.getProfile();
+        const profileResponse = await apiService.getProfile(userId || undefined);
         if (profileResponse.success && profileResponse.data) {
           const profileData = profileResponse.data;
           setProfile(profileData);

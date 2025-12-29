@@ -18,6 +18,8 @@ export interface CartItem {
     discount_amount?: number | null;
     discount_type?: "percentage" | "amount" | null;
     image_url: string | null;
+    image_urls?: string[] | null;
+    images?: any[] | null;
   };
 }
 
@@ -86,9 +88,16 @@ export const useCart = () => {
       const response = await apiService.getCart();
       if (response.success && response.data?.items) {
         // Ensure productId is set for all items (backend might return product._id instead)
+        // Also ensure image data is properly preserved
         const mappedItems = response.data.items.map((item: any) => ({
           ...item,
-          productId: item.productId || item.product?._id
+          productId: item.productId || item.product?._id,
+          product: {
+            ...item.product,
+            image_url: item.product?.image_url || item.product?.images?.[0]?.url || item.product?.images?.[0] || null,
+            image_urls: item.product?.image_urls || item.product?.images?.map((img: any) => img.url || img) || [item.product?.image_url].filter(Boolean),
+            images: item.product?.images || null
+          }
         }));
         setItemsAndBroadcast(mappedItems);
       }
@@ -148,7 +157,9 @@ export const useCart = () => {
             discount: product.discount,
             discount_amount: product.discount_amount,
             discount_type: product.discount_type,
-            image_url: product.image_url
+            image_url: product.image_url || product.images?.[0]?.url || product.images?.[0] || null,
+            image_urls: product.image_urls || product.images?.map((img: any) => img.url || img) || [product.image_url].filter(Boolean),
+            images: product.images || null
           }
         };
         newItems = [...items, newItem];

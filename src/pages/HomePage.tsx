@@ -4,12 +4,16 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
-import { ShoppingCart, Filter } from "lucide-react";
-import { Link } from "react-router-dom";
+import { ShoppingCart, Filter, Droplet, Building2, Truck, Zap, Mail, Instagram } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
 import { useCart } from "@/hooks/useCart";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/components/ui/use-toast";
 import { computeDiscountedPrice } from "@/utils/pricing";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Header } from "@/components/layout/Header";
+import { AuthSheet } from "@/components/AuthSheet";
 
 interface Product {
   id: string;
@@ -50,20 +54,23 @@ interface Category {
   homepage_description: string | null;
 }
 
-interface CategoryWithProducts extends Category {
-  products: Product[];
-}
-
 export const HomePage = () => {
   const [carouselItems, setCarouselItems] = useState<CarouselItem[]>([]);
   const [carouselDelayMs, setCarouselDelayMs] = useState<number>(5000);
   const [carouselAutoplay, setCarouselAutoplay] = useState<boolean>(true);
   const [products, setProducts] = useState<Product[]>([]);
+  const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState("name");
-  const { addToCart } = useCart();
+  const [newsletterEmail, setNewsletterEmail] = useState("");
+  const [newsletterLoading, setNewsletterLoading] = useState(false);
+  const [authSheetOpen, setAuthSheetOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const { addToCart, items, updateQuantity } = useCart();
+  const { user } = useAuth();
+  const location = useLocation();
 
   useEffect(() => {
     loadData();
@@ -80,8 +87,8 @@ export const HomePage = () => {
       if (carouselResponse.success && carouselResponse.data) {
         const mappedItems = Array.isArray(carouselResponse.data) 
           ? carouselResponse.data
-              .filter((item: any) => item.isActive !== false) // Filter active items
-              .sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0)) // Sort by order
+              .filter((item: any) => item.isActive !== false)
+              .sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0))
               .map((item: any) => ({
                 id: item._id || item.id,
                 title: item.title || item.subtitle || null,
@@ -94,7 +101,32 @@ export const HomePage = () => {
         setCarouselItems(mappedItems);
       }
 
-      // Load categories - only show categories that are marked for homepage display
+      // Load featured products for Best Sellers section
+      console.log("⭐ Loading featured products...");
+      const featuredResponse = await apiService.getFeaturedProducts({ limit: 3 });
+      if (featuredResponse.success && featuredResponse.data) {
+        const featuredData = featuredResponse.data.data || featuredResponse.data.products || featuredResponse.data || [];
+        const transformed = Array.isArray(featuredData)
+          ? featuredData.slice(0, 3).map((product: any) => ({
+              id: product._id || product.id,
+              title: product.name || product.title,
+              description: product.description || product.shortDescription || '',
+              price: product.price || 0,
+              discount: product.discount || null,
+              discount_amount: product.discount_amount || null,
+              discount_type: product.discount_type || null,
+              image_url: product.image_url || product.images?.[0]?.url || null,
+              image_urls: product.image_urls || product.images?.map((img: any) => img.url || img) || [product.image_url].filter(Boolean),
+          category: {
+            name: product.category?.name || 'Unknown'
+          },
+          variants: product.variants || []
+            }))
+          : [];
+        setFeaturedProducts(transformed);
+      }
+
+      // Load categories
       console.log("📂 Loading homepage categories...");
       const categoriesResponse = await apiService.getHomepageCategories();
       console.log("📂 Categories response:", categoriesResponse);
@@ -104,13 +136,11 @@ export const HomePage = () => {
         const cats = Array.isArray(categoriesData) 
           ? categoriesData
               .filter((cat: any) => {
-                // Only show categories that are active AND marked for homepage
                 const isActive = cat.isActive !== false;
                 const showOnHomepage = cat.showOnHomepage === true || cat.show_on_homepage === true;
                 return isActive && showOnHomepage;
               })
               .sort((a: any, b: any) => {
-                // Sort by homepageOrder first, then by sortOrder
                 const orderA = a.homepageOrder || a.order || a.sortOrder || 0;
                 const orderB = b.homepageOrder || b.order || b.sortOrder || 0;
                 return orderA - orderB;
@@ -127,7 +157,7 @@ export const HomePage = () => {
         setCategories(cats);
       }
 
-      // Load all products
+      // Load all products for the products section
       console.log("🛍️ Loading all products...");
       const productsParams: any = {};
       if (selectedCategoryId) {
@@ -147,7 +177,6 @@ export const HomePage = () => {
       console.log("🛍️ Products response:", productsResponse);
       
       if (productsResponse.success && productsResponse.data) {
-        // Handle different possible data structures
         let productsData = [];
         if (Array.isArray(productsResponse.data)) {
           productsData = productsResponse.data;
@@ -157,26 +186,17 @@ export const HomePage = () => {
           productsData = productsResponse.data.products;
         }
         
-        console.log("🛍️ Products array:", productsData);
-        
-        // Get list of homepage category IDs for filtering products
         const homepageCategoryIds = categories.map(c => c.id);
         
-        // Transform API data to match frontend interface
         const transformedProducts = productsData
           .filter((p: any) => {
-            // Filter active products
             if (p.isActive === false) return false;
             
-            // If we have homepage categories and no specific category is selected,
-            // only show products from categories that are visible on homepage
             if (homepageCategoryIds.length > 0 && !selectedCategoryId) {
               const productCategoryId = p.category?._id || p.category?.id || p.category;
               return homepageCategoryIds.includes(productCategoryId);
             }
             
-            // If a specific category is selected, show all products from that category
-            // (even if category is not on homepage - user explicitly selected it)
             return true;
           })
           .map((product: any) => ({
@@ -189,16 +209,13 @@ export const HomePage = () => {
             discount_type: product.discount_type || null,
             image_url: product.image_url || product.images?.[0]?.url || null,
             image_urls: product.image_urls || product.images?.map((img: any) => img.url || img) || [product.image_url].filter(Boolean),
-            category: {
+              category: {
               name: product.category?.name || 'Unknown'
-            },
-            variants: product.variants || []
-          }));
-        
-        console.log("🛍️ Transformed products:", transformedProducts);
+              },
+              variants: product.variants || []
+            }));
+            
         setProducts(transformedProducts);
-      } else {
-        console.warn("⚠️ Products response not successful:", productsResponse);
       }
     } catch (error) {
       console.error("❌ Error loading homepage data:", error);
@@ -211,8 +228,58 @@ export const HomePage = () => {
     await addToCart(productId, 1);
   };
 
+  const getCartItem = (productId: string) => {
+    return items.find(item => item.productId === productId);
+  };
+
+  const handleIncrement = async (productId: string) => {
+    const cartItem = getCartItem(productId);
+    if (cartItem) {
+      await updateQuantity(cartItem._id, cartItem.quantity + 1);
+    } else {
+      await addToCart(productId, 1);
+    }
+  };
+
+  const handleDecrement = async (productId: string) => {
+    const cartItem = getCartItem(productId);
+    if (cartItem) {
+      await updateQuantity(cartItem._id, cartItem.quantity - 1);
+    }
+  };
+
   const handleCategoryFilter = (categoryId: string | null) => {
     setSelectedCategoryId(categoryId);
+  };
+
+  const handleNewsletterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newsletterEmail) {
+      toast({
+        title: "Error",
+        description: "Please enter your email address",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setNewsletterLoading(true);
+    try {
+      // You can add newsletter subscription API call here
+      toast({
+        title: "Success!",
+        description: "Thank you for subscribing to our newsletter!",
+      });
+      setNewsletterEmail("");
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to subscribe. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setNewsletterLoading(false);
+    }
   };
 
   if (loading) {
@@ -224,262 +291,409 @@ export const HomePage = () => {
   }
 
   return (
-    <div className="min-h-screen gradient-subtle">
-      {/* Hero Carousel */}
-      {carouselItems.length > 0 && (
-        <section className="relative">
-          {carouselItems.length === 1 ? (
-            <div className="relative h-96 md:h-[500px] lg:h-[600px] overflow-hidden">
-              {(() => {
-                const item = carouselItems[0];
-                if (item.video_url) {
-                  return (
-                    <video
-                      src={item.video_url}
-                      className="w-full h-full object-cover"
-                      muted
-                      loop
-                      playsInline
-                      preload="metadata"
-                      autoPlay
-                    />
-                  );
-                }
-                return (
-                  <img
-                    src={item.image_url || "/api/placeholder/1200/600"}
-                    alt={item.title || "Carousel image"}
-                    className="w-full h-full object-contain bg-black md:object-cover"
-                  />
-                );
-              })()}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center text-white drop-shadow-lg">
-                  {carouselItems[0].title && (
-                    <h1 className="text-4xl md:text-6xl font-bold mb-4">{carouselItems[0].title}</h1>
-                  )}
-                  {(carouselItems[0].product_id || carouselItems[0].link_url) && (
-                    <Button size="lg" className="gradient-luxury" asChild>
-                      {carouselItems[0].product_id ? (
-                        <Link to={`/products/${carouselItems[0].product_id}`}>Shop Now</Link>
-                      ) : carouselItems[0].link_url?.startsWith('/') ? (
-                        <Link to={carouselItems[0].link_url}>Shop Now</Link>
-                      ) : (
-                        <a href={carouselItems[0].link_url!} target="_blank" rel="noopener noreferrer">Shop Now</a>
-                      )}
+    <div className="min-h-screen">
+      {/* Header and Hero Section with unified bg.png background */}
+      <div
+        className="relative w-full"
+        style={{
+          backgroundImage: 'url(/bg.png)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+      >
+        <Header />
+        {/* Hero Section - Continuation of the same background */}
+        <section className="relative min-h-[600px] md:min-h-[700px] lg:min-h-[800px] pt-2 pb-16">
+          <div className="container mx-auto px-4 md:px-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+              {/* Left Side - Hero Text */}
+              <div className="text-white space-y-6 z-10">
+                <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight">
+                  Fuel Your Day the Phresh Way
+                </h1>
+                <p className="text-lg md:text-xl text-white/90 leading-relaxed">
+                  Cold-pressed juices. Wellness boosters. Cleanses & community vibes.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                  <Link to="/products">
+                    <Button size="lg" className="bg-green-800 text-white hover:bg-green-900 font-semibold w-full sm:w-auto">
+                      Order Now
                     </Button>
+                  </Link>
+                </div>
+              </div>
+
+              {/* Right Side - Hero Image */}
+              <div className="relative z-10">
+                <div className="relative h-96 md:h-[500px] lg:h-[600px] rounded-lg overflow-hidden shadow-2xl">
+                  {carouselItems.length > 0 && carouselItems[0]?.image_url ? (
+                    <img
+                      src={carouselItems[0].image_url}
+                      alt={carouselItems[0].title || "Phresh Juice"}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : featuredProducts.length > 0 && featuredProducts[0]?.image_url ? (
+                    <img
+                      src={featuredProducts[0].image_url}
+                      alt={featuredProducts[0].title || "Phresh Juice"}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : products.length > 0 && products[0]?.image_url ? (
+                    <img
+                      src={products[0].image_url}
+                      alt={products[0].title || "Phresh Juice"}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <img
+                      src="/placeholder.svg"
+                      alt="Phresh Juice"
+                      className="w-full h-full object-cover bg-white/10"
+                    />
                   )}
                 </div>
               </div>
             </div>
-          ) : (
-            <Carousel
-              className="w-full"
-              opts={{ loop: true }}
-              autoPlay={carouselAutoplay}
-              autoPlayInterval={carouselDelayMs}
-              setApi={(api) => {
-                try {
-                  if (!api) return;
-                  const syncVideo = () => {
-                    const selected = api.selectedScrollSnap();
-                    const nodes = api.slideNodes();
-                    nodes.forEach((node: Element, i: number) => {
-                      const v = node.querySelector('video') as HTMLVideoElement | null;
-                      if (!v) return;
-                      if (i === selected) {
-                        v.play().catch(() => { });
-                      } else {
-                        try { v.pause(); v.currentTime = 0; } catch { }
-                      }
-                    });
-                  };
-                  api.on('select', syncVideo);
-                  api.on('reInit', syncVideo);
-                  // Initial sync
-                  syncVideo();
-                } catch { }
-              }}
-            >
-              <CarouselContent>
-                {carouselItems.map((item) => (
-                  <CarouselItem key={item.id}>
-                    <div className="relative h-96 md:h-[500px] lg:h-[600px] overflow-hidden">
-                      {item.video_url ? (
-                        <video
-                          src={item.video_url}
-                          className="w-full h-full object-cover"
-                          muted
-                          loop
-                          playsInline
-                          preload="metadata"
-                        />
-                      ) : (
-                        <img
-                          src={item.image_url || "/api/placeholder/1200/600"}
-                          alt={item.title || "Carousel image"}
-                          className="w-full h-full object-contain bg-black md:object-cover"
-                        />
-                      )}
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="text-center text-white drop-shadow-lg">
-                          {item.title && (
-                            <h1 className="text-4xl md:text-6xl font-bold mb-4">{item.title}</h1>
-                          )}
-                          {(item.product_id || item.link_url) && (
-                            <Button size="lg" className="gradient-luxury" asChild>
-                              {item.product_id ? (
-                                <Link to={`/products/${item.product_id}`}>Shop Now</Link>
-                              ) : item.link_url?.startsWith('/') ? (
-                                <Link to={item.link_url}>Shop Now</Link>
-                              ) : (
-                                <a href={item.link_url!} target="_blank" rel="noopener noreferrer">Shop Now</a>
-                              )}
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </CarouselItem>
-                ))}
-              </CarouselContent>
-              <CarouselPrevious className="left-4" />
-              <CarouselNext className="right-4" />
-            </Carousel>
-          )}
+          </div>
         </section>
-      )}
+      </div>
 
-      {/* All Products Section */}
-      <div className="container py-8 bg-white">
-        {/* Filters */}
-        <div className="flex flex-col md:flex-row gap-4 mb-8">
-          <div className="flex items-center space-x-2">
-            <Filter className="h-4 w-4" />
-            <span className="text-sm font-medium">Filter by category:</span>
-          </div>
+      {/* About Phresh Section - with bgWhite.png background */}
+      <section 
+        className="py-16 md:py-24 relative"
+        style={{
+          backgroundImage: 'url(/bgWhite.png)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+      >
+        <div className="container mx-auto px-4 md:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+            {/* Left Side - Text Content */}
+            <div className="space-y-6 text-left">
+              <div>
+                <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4 text-left">About Phresh</h2>
+                <div className="w-20 h-1 bg-primary mb-6"></div>
+              </div>
+              <p className="text-lg md:text-xl text-gray-700 leading-relaxed text-left">
+                Phresh is all about clean living and nutrient-packed juices, served with that fresh energy. 
+                From stress-busting blends to detox cleanses and wellness shots, we make feeling good look fresh. 
+                Experience the power of cold-pressed goodness delivered straight to your door.
+              </p>
+            </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant={!selectedCategoryId ? "default" : "outline"}
-              size="sm"
-              onClick={() => handleCategoryFilter(null)}
-            >
-              All
-            </Button>
-            {categories.map((category) => (
-              <Button
-                key={category.id}
-                variant={selectedCategoryId === category.id ? "default" : "outline"}
-                size="sm"
-                onClick={() => handleCategoryFilter(category.id)}
-              >
-                {category.name}
-              </Button>
-            ))}
-          </div>
-
-          <div className="md:ml-auto">
-            <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="name">Name (A-Z)</SelectItem>
-                <SelectItem value="price_low">Price (Low to High)</SelectItem>
-                <SelectItem value="price_high">Price (High to Low)</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Right Side - Juice Image */}
+            <div className="relative h-64 md:h-80 lg:h-96 rounded-lg overflow-hidden shadow-lg">
+              {featuredProducts.length > 0 && featuredProducts[0]?.image_url ? (
+                <img
+                  src={featuredProducts[0].image_url}
+                  alt="Phresh Juices"
+                  className="w-full h-full object-cover"
+                />
+              ) : products.length > 0 && products[0]?.image_url ? (
+                <img
+                  src={products[0].image_url}
+                  alt="Phresh Juices"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <img
+                  src="/placeholder.svg"
+                  alt="Phresh Juices"
+                  className="w-full h-full object-cover bg-gray-100"
+                />
+              )}
+            </div>
           </div>
         </div>
+      </section>
 
-        {/* Products Grid */}
-        {loading ? (
-          <div className="flex justify-center items-center py-16">
-            <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
-          </div>
-        ) : products.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-muted-foreground">No products found.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 justify-items-center">
-            {products.map((product) => {
-              const primaryImage = product.image_urls?.[0] || product.image_url || "/api/placeholder/300/300";
-              const secondaryImage = product.image_urls?.[1] || primaryImage;
-              const pricing = computeDiscountedPrice(product);
-              const formattedFinalPrice = pricing.finalPrice.toLocaleString('en-IN');
-              const formattedSavings = pricing.hasDiscount
-                ? Math.round(pricing.savings).toLocaleString('en-IN')
-                : null;
-              const badgeText =
-                pricing.discountType === "amount" ? "Sale" : pricing.discountLabel;
+      {/* Best Sellers Section - with bg.png background */}
+      <section 
+        className="py-16 md:py-24 relative"
+        style={{
+          backgroundImage: 'url(/bg.png)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+      >
+        <div className="container mx-auto px-4 md:px-8">
+          <h2 className="text-3xl md:text-4xl font-bold text-center mb-12 text-white">Our Best Sellers</h2>
+          {featuredProducts.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+              {featuredProducts.map((product) => {
+                const primaryImage = product.image_urls?.[0] || product.image_url || "/api/placeholder/300/300";
+                // Use category name or description as tagline
+                const tagline = product.category?.name || product.description?.split('.')[0] || "Fresh & Healthy";
 
-              return (
-                <Link
-                  key={product.id}
-                  to={`/products/${product.id}`}
-                  className="block h-full w-[338px] flex-shrink-0 snap-start md:w-full md:flex-shrink md:snap-normal"
-                >
-                  <Card className="group flex h-[500px] min-h-[500px] flex-col overflow-hidden hover:shadow-elegant transition-shadow duration-300">
-                    <div className="relative h-[360px] overflow-hidden">
-                      <img
-                        src={primaryImage}
-                        alt={product.title}
-                        className="absolute inset-0 h-full w-full object-cover transition-opacity duration-300 group-hover:opacity-0"
+                return (
+                  <div key={product.id} className="flex flex-col items-center text-center space-y-4">
+                    {/* Product Image */}
+                    <div className="relative w-full h-80 md:h-96 overflow-hidden rounded-lg">
+                        <img
+                          src={primaryImage}
+                          alt={product.title}
+                        className="w-full h-full object-cover"
                       />
-                      <img
-                        src={secondaryImage}
-                        alt={product.title}
-                        className="absolute inset-0 h-full w-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-                      />
-                      {pricing.hasDiscount && badgeText && (
-                        <Badge className="absolute top-3 left-3 gradient-luxury">
-                          {badgeText}
-                        </Badge>
-                      )}
-                    </div>
-
-                    <CardContent className="flex h-[120px] flex-col justify-between gap-2 p-4">
-                      <h3 className="font-bold text-base group-hover:text-primary transition-colors leading-snug h-[48px] overflow-hidden">
-                        {product.title}
-                      </h3>
-
-                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
-                        <span className="text-base font-semibold text-primary">Rs {formattedFinalPrice}</span>
-                        {pricing.hasDiscount && (
-                          <>
-                            <span className="text-xs text-muted-foreground line-through">
-                              Rs {pricing.basePrice.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-                            </span>
-                            {formattedSavings && (
-                              <span className="text-xs font-medium text-emerald-600">Save Rs {formattedSavings}</span>
-                            )}
-                          </>
-                        )}
                       </div>
-                    </CardContent>
 
-                    <CardFooter className="mt-auto pt-0 px-4 pb-4">
-                      <Button
-                        className="w-full"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleAddToCart(product.id);
-                        }}
-                      >
-                        <ShoppingCart className="h-4 w-4 mr-2" />
-                        Add to Cart
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                </Link>
-              );
-            })}
+                    {/* Product Info */}
+                    <div className="space-y-2 w-full">
+                      <h3 className="text-xl md:text-2xl font-bold text-white">{product.title}</h3>
+                      <p className="text-sm md:text-base text-white/80">{tagline}</p>
+                      {(() => {
+                        const cartItem = getCartItem(product.id);
+                        if (cartItem && cartItem.quantity > 0) {
+                          return (
+                            <div className="flex items-center justify-center gap-2 mt-4">
+                              <Button
+                                size="icon"
+                                className="bg-green-800 text-white hover:bg-green-900 h-10 w-10 rounded-full"
+                                onClick={() => handleDecrement(product.id)}
+                              >
+                                -
+                              </Button>
+                              <span className="text-white font-semibold text-lg min-w-[2rem] text-center">
+                                {cartItem.quantity}
+                              </span>
+                              <Button
+                                size="icon"
+                                className="bg-green-800 text-white hover:bg-green-900 h-10 w-10 rounded-full"
+                                onClick={() => handleIncrement(product.id)}
+                              >
+                                +
+                              </Button>
+                        </div>
+                          );
+                        }
+                        return (
+                        <Button
+                            className="w-full mt-4 bg-green-800 text-white hover:bg-green-900 font-semibold"
+                            onClick={() => handleAddToCart(product.id)}
+                          >
+                            ORDER NOW
+                        </Button>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <p className="text-white/80">Featured products coming soon!</p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Why Phresh Works Section - with bgWhite.png background */}
+      <section 
+        className="py-16 md:py-24 relative"
+        style={{
+          backgroundImage: 'url(/bgWhite.png)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+      >
+        <div className="container mx-auto px-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-center mb-12 text-gray-900">Why Phresh Works</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
+            <div className="text-center">
+              <div className="bg-primary/20 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
+                <Droplet className="h-10 w-10 text-primary" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Cold-Pressed Goodness</h3>
+              <p className="text-gray-700">Fresh, nutrient-rich juices made with the finest ingredients</p>
+            </div>
+            <div className="text-center">
+              <div className="bg-primary/20 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
+                <Building2 className="h-10 w-10 text-primary" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Made Fresh Daily</h3>
+              <p className="text-gray-700">Prepared fresh every day to ensure maximum nutrition</p>
+            </div>
+            <div className="text-center">
+              <div className="bg-primary/20 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
+                <Truck className="h-10 w-10 text-primary" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Delivered Fresh</h3>
+              <p className="text-gray-700">Fast delivery to keep your juices fresh and delicious</p>
+            </div>
+            <div className="text-center">
+              <div className="bg-primary/20 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
+                <Zap className="h-10 w-10 text-primary" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Wellness Boosters</h3>
+              <p className="text-gray-700">Powerful cleanses and wellness shots for your health</p>
+            </div>
+            </div>
           </div>
-        )}
-      </div>
+        </section>
+
+      {/* All Products Section - with bg.png background */}
+      <section 
+        className="py-16 relative"
+        style={{
+          backgroundImage: 'url(/bg.png)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+      >
+        <div className="container mx-auto px-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-center mb-8 text-white">Shop All Products</h2>
+          
+          {/* Filters */}
+          <div className="flex flex-col md:flex-row gap-4 mb-8">
+            <div className="flex items-center space-x-2">
+              <Filter className="h-4 w-4 text-white" />
+              <span className="text-sm font-medium text-white">Filter by category:</span>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={!selectedCategoryId ? "default" : "outline"}
+                size="sm"
+                onClick={() => handleCategoryFilter(null)}
+                className={!selectedCategoryId ? "bg-green-800 text-white hover:bg-green-900" : "bg-green-700/50 border-green-600 text-white hover:bg-green-700"}
+              >
+                All
+              </Button>
+              {categories.map((category) => (
+                <Button
+                  key={category.id}
+                  variant={selectedCategoryId === category.id ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handleCategoryFilter(category.id)}
+                  className={selectedCategoryId === category.id ? "bg-green-800 text-white hover:bg-green-900" : "bg-green-700/50 border-green-600 text-white hover:bg-green-700"}
+                >
+                  {category.name}
+                    </Button>
+              ))}
+            </div>
+
+            <div className="md:ml-auto">
+              <Select value={sortBy} onValueChange={setSortBy}>
+                <SelectTrigger className="w-48 bg-white/90 border-white/30 text-gray-900">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name">Name (A-Z)</SelectItem>
+                  <SelectItem value="price_low">Price (Low to High)</SelectItem>
+                  <SelectItem value="price_high">Price (High to Low)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+                </div>
+
+          {/* Products Grid */}
+          {products.length === 0 ? (
+            <div className="text-center py-16">
+              <p className="text-white/80">No products found.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 justify-items-center">
+              {products.map((product) => {
+                      const primaryImage = product.image_urls?.[0] || product.image_url || "/api/placeholder/300/300";
+                // Use category name or description as tagline
+                const tagline = product.category?.name || product.description?.split('.')[0] || "Fresh & Healthy";
+
+                      return (
+                  <div key={product.id} className="flex flex-col items-center text-center space-y-4 w-full">
+                    {/* Product Image */}
+                    <div className="relative w-full h-80 md:h-96 overflow-hidden rounded-lg">
+                              <img
+                                src={primaryImage}
+                                alt={product.title}
+                        className="w-full h-full object-cover"
+                      />
+                            </div>
+
+                    {/* Product Info */}
+                    <div className="space-y-2 w-full">
+                      <h3 className="text-xl md:text-2xl font-bold text-white">{product.title}</h3>
+                      <p className="text-sm md:text-base text-white/80">{tagline}</p>
+                      {(() => {
+                        const cartItem = getCartItem(product.id);
+                        if (cartItem && cartItem.quantity > 0) {
+                          return (
+                            <div className="flex items-center justify-center gap-2 mt-4">
+                              <Button
+                                size="icon"
+                                className="bg-green-800 text-white hover:bg-green-900 h-10 w-10 rounded-full"
+                                onClick={() => handleDecrement(product.id)}
+                              >
+                                -
+                              </Button>
+                              <span className="text-white font-semibold text-lg min-w-[2rem] text-center">
+                                {cartItem.quantity}
+                                      </span>
+                              <Button
+                                size="icon"
+                                className="bg-green-800 text-white hover:bg-green-900 h-10 w-10 rounded-full"
+                                onClick={() => handleIncrement(product.id)}
+                              >
+                                +
+                              </Button>
+                            </div>
+                          );
+                        }
+                        return (
+                          <Button 
+                            className="w-full mt-4 bg-green-800 text-white hover:bg-green-900 font-semibold"
+                            onClick={() => handleAddToCart(product.id)}
+                          >
+                            ORDER NOW
+                          </Button>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                );
+              })}
+                  </div>
+                )}
+              </div>
+            </section>
+
+      {/* Community in Action Section - with bgWhite.png background */}
+      <section 
+        className="py-16 md:py-24 relative"
+        style={{
+          backgroundImage: 'url(/bgWhite.png)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+      >
+        <div className="container mx-auto px-4">
+          <div className="max-w-4xl mx-auto text-center">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">Community in Action</h2>
+            <p className="text-xl text-gray-600 mb-8">Fresh, Healthy, Together</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="aspect-square bg-gray-200 rounded-lg overflow-hidden">
+                  <div className="w-full h-full flex items-center justify-center text-gray-400">
+                    <Instagram className="h-12 w-12" />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-gray-600">
+              Tag us <span className="font-semibold text-primary">@phresh</span> to be featured!
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Auth Sheet */}
+      <AuthSheet open={authSheetOpen} onOpenChange={setAuthSheetOpen} defaultMode={authMode} />
     </div>
   );
 };

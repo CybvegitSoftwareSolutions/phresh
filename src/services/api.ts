@@ -46,17 +46,78 @@ class ApiService {
     }
 
     try {
+      console.log('Making API request to:', url);
+      console.log('Request config:', { method: config.method, headers: config.headers, body: config.body });
+      
       const response = await fetch(url, config);
-      const data = await response.json();
-
+      
+      console.log('Response status:', response.status, response.statusText);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      
+      // Check if response is ok before trying to parse JSON
       if (!response.ok) {
-        throw new Error(data.message || 'Request failed');
+        let errorMessage = `Request failed with status ${response.status}`;
+        let errorData: any = null;
+        
+        try {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            errorData = await response.json();
+            console.log('Error response data:', errorData);
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } else {
+            const text = await response.text();
+            console.log('Error response text:', text);
+            errorMessage = text || errorMessage;
+          }
+        } catch (parseError) {
+          console.error('Error parsing error response:', parseError);
+          // If we can't parse the error response, use the status text
+          errorMessage = response.statusText || errorMessage;
+        }
+        
+        return {
+          success: false,
+          message: errorMessage,
+          error: errorMessage,
+          data: errorData
+        };
       }
 
+      // Try to parse JSON response
+      let data: any;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const responseText = await response.text();
+        console.log('Response text:', responseText);
+        if (responseText) {
+          data = JSON.parse(responseText);
+        } else {
+          console.warn('Empty response body');
+          data = { success: false, message: 'Empty response from server' };
+        }
+      } else {
+        // If response is not JSON, return a success response with the text
+        const text = await response.text();
+        console.log('Non-JSON response:', text);
+        data = { success: true, data: text, message: 'Request successful' };
+      }
+
+      console.log('Parsed response data:', data);
       return data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('API Request failed:', error);
-      throw error;
+      console.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+      // Return a structured error response instead of throwing
+      return {
+        success: false,
+        message: error.message || 'Network error. Please check your connection and try again.',
+        error: error.message
+      };
     }
   }
 
@@ -72,8 +133,8 @@ class ApiService {
       body: JSON.stringify(userData),
     });
 
-    if (response.success && response.data?.token) {
-      this.token = response.data.token;
+    if (response.success && response.data && typeof response.data === 'object' && 'token' in response.data) {
+      this.token = (response.data as any).token;
       localStorage.setItem('jwt_token', this.token);
     }
 
@@ -86,16 +147,18 @@ class ApiService {
       body: JSON.stringify(credentials),
     });
 
-    if (response.success && response.data?.token) {
-      this.token = response.data.token;
+    if (response.success && response.data && typeof response.data === 'object' && 'token' in response.data) {
+      this.token = (response.data as any).token;
       localStorage.setItem('jwt_token', this.token);
     }
 
     return response;
   }
 
-  async getProfile() {
-    return this.request('/api/auth/profile');
+  async getProfile(userId?: string) {
+    // If userId is provided, add it as query parameter
+    const endpoint = userId ? `/api/auth/profile?userId=${userId}` : '/api/auth/profile';
+    return this.request(endpoint);
   }
 
   async updateProfile(userData: any) {
@@ -837,8 +900,8 @@ class ApiService {
       body: JSON.stringify({ name, email, password, otp }),
     });
 
-    if (response.success && response.data?.token) {
-      this.token = response.data.token;
+    if (response.success && response.data && typeof response.data === 'object' && 'token' in response.data) {
+      this.token = (response.data as any).token;
       localStorage.setItem('jwt_token', this.token);
     }
 

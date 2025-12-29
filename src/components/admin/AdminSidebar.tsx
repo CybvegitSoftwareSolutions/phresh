@@ -113,6 +113,7 @@ const menuItems = [
 export function AdminSidebar() {
   const { state } = useSidebar();
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const currentPath = location.pathname;
   const isCollapsed = state === "collapsed";
@@ -132,6 +133,7 @@ export function AdminSidebar() {
 
   const handleSignOut = async () => {
     await signOut();
+    // signOut already handles redirect for admin pages
   };
 
   const getUserInitials = () => {

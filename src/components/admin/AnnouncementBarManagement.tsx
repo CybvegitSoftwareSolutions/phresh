@@ -289,7 +289,7 @@ export const AnnouncementBarManagement = () => {
               onChange={(event) => setFormData({ ...formData, link_url: event.target.value })}
               placeholder="https://example.com"
             />
-          </div>
+                    </div>
 
           <div className="space-y-2">
             <Label htmlFor="show-in-header">Show in header</Label>
@@ -316,8 +316,8 @@ export const AnnouncementBarManagement = () => {
         <CardContent>
           <div className="rounded-lg p-4" style={previewStyle}>
             <span className="block text-center font-medium">
-              {formData.message || 'Your announcement will appear here.'}
-            </span>
+                {formData.message || 'Your announcement will appear here.'}
+              </span>
           </div>
           <p className="mt-3 text-sm text-muted-foreground">
             The preview uses the selected colors and animation. On the storefront, it appears above the main header on every page.

@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { Header } from "@/components/layout/Header";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +15,9 @@ import { useCart } from "@/hooks/useCart";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { computeDiscountedPrice } from "@/utils/pricing";
+import { Footer } from "@/components/layout/Footer";
+import { Header } from "@/components/layout/Header";
+import { AuthSheet } from "@/components/AuthSheet";
 
 interface ShippingSettings {
   _id: string;
@@ -45,9 +47,12 @@ export const CheckoutPage = () => {
   const { items, clearCart, getTotal, loading: cartLoading } = useCart();
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const [shippingSettings, setShippingSettings] = useState<ShippingSettings | null>(null);
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null);
+  const [authSheetOpen, setAuthSheetOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   
   // Saved addresses
   type SavedAddress = {
@@ -463,16 +468,22 @@ export const CheckoutPage = () => {
 
       const orderResponse = await apiService.createOrder(orderData);
       
-      if (!orderResponse.success || !orderResponse.data) {
+      console.log('Order response:', orderResponse); // Debug log
+      
+      if (!orderResponse || !orderResponse.success) {
         // Show detailed validation errors if available
-        let errorMessage = orderResponse.message || "Failed to create order";
-        if (orderResponse.errors && Array.isArray(orderResponse.errors)) {
+        let errorMessage = orderResponse?.message || orderResponse?.error || "Failed to create order";
+        if (orderResponse?.errors && Array.isArray(orderResponse.errors)) {
           const errorDetails = orderResponse.errors.map((err: any) => 
             `${err.field}: ${err.message}`
           ).join(", ");
           errorMessage = `${errorMessage}. ${errorDetails}`;
         }
         throw new Error(errorMessage);
+      }
+
+      if (!orderResponse.data) {
+        throw new Error("Order was created but no order data was returned. Please contact support.");
       }
 
       const orderNumber = orderResponse.data.orderNumber;
@@ -513,9 +524,10 @@ export const CheckoutPage = () => {
 
     } catch (error: any) {
       console.error('Order error:', error);
+      const errorMessage = error?.message || error?.error || "There was an error processing your order. Please try again.";
       toast({
         title: "Order Failed",
-        description: error.message || "There was an error processing your order. Please try again.",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
@@ -523,13 +535,17 @@ export const CheckoutPage = () => {
     }
   };
 
+
   if (cartLoading) {
     return (
       <div className="min-h-screen">
         <Header />
-        <div className="container py-16 text-center">
-          <p className="text-muted-foreground">Loading your cart...</p>
-        </div>
+        <section className="py-16 bg-white">
+          <div className="container mx-auto px-4 md:px-8 text-center">
+            <p className="text-gray-600">Loading your cart...</p>
+          </div>
+        </section>
+        <Footer />
       </div>
     );
   }
@@ -538,32 +554,36 @@ export const CheckoutPage = () => {
     return (
       <div className="min-h-screen">
         <Header />
-        <div className="container py-16 text-center">
-          <ShoppingCart className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-          <h1 className="text-2xl font-bold mb-2">Your cart is empty</h1>
-          <p className="text-muted-foreground mb-6">
-            Add some items to your cart before checkout.
-          </p>
-          <Button onClick={() => navigate("/products")}>
-            Continue Shopping
-          </Button>
-        </div>
+        <section className="py-16 bg-white">
+          <div className="container mx-auto px-4 md:px-8 text-center">
+            <ShoppingCart className="h-16 w-16 mx-auto mb-4 text-gray-400" />
+            <h1 className="text-2xl font-bold mb-2 text-gray-900">Your cart is empty</h1>
+            <p className="text-gray-600 mb-6">
+              Add some items to your cart before checkout.
+            </p>
+            <Button onClick={() => navigate("/products")} className="bg-green-800 text-white hover:bg-green-900">
+              Continue Shopping
+            </Button>
+          </div>
+        </section>
+        <Footer />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen gradient-subtle">
+    <div className="min-h-screen">
       <Header />
 
-      <div className="container py-8 max-w-6xl">
+      <section className="py-16 bg-white">
+        <div className="container mx-auto px-4 md:px-8 max-w-6xl">
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Left Column - Forms */}
             <div className="lg:col-span-2 space-y-6">
 
               {/* Contact Section */}
-              <Card className="shadow-soft">
+              <Card className="shadow-md border-gray-200">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Mail className="h-5 w-5" />
@@ -595,7 +615,7 @@ export const CheckoutPage = () => {
               </Card>
 
               {/* Delivery Section */}
-              <Card className="shadow-soft">
+              <Card className="shadow-md border-gray-200">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Truck className="h-5 w-5" />
@@ -756,7 +776,7 @@ export const CheckoutPage = () => {
               </Card>
 
               {/* Shipping Method */}
-              <Card className="shadow-soft">
+              <Card className="shadow-md border-gray-200">
                 <CardHeader>
                   <CardTitle>Shipping method</CardTitle>
                 </CardHeader>
@@ -780,7 +800,7 @@ export const CheckoutPage = () => {
               </Card>
 
               {/* Payment Section */}
-              <Card className="shadow-soft">
+              <Card className="shadow-md border-gray-200">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <CreditCard className="h-5 w-5" />
@@ -875,7 +895,7 @@ export const CheckoutPage = () => {
               </Card>
 
               {/* Billing Address */}
-              <Card className="shadow-soft">
+              <Card className="shadow-md border-gray-200">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Building2 className="h-5 w-5" />
@@ -948,7 +968,7 @@ export const CheckoutPage = () => {
 
             {/* Right Column - Order Summary */}
             <div>
-              <Card className="sticky top-24 shadow-soft">
+              <Card className="sticky top-24 shadow-lg border-gray-200">
                 <CardHeader>
                   <CardTitle>Order Summary</CardTitle>
                 </CardHeader>
@@ -963,7 +983,11 @@ export const CheckoutPage = () => {
                         <div key={item._id} className="flex items-start space-x-3">
                           <div className="relative">
                             <img
-                              src={item.product.image_url || "/api/placeholder/60/60"}
+                              src={(item.product as any).image_urls?.[0] 
+                                || item.product.image_url 
+                                || (item.product as any).images?.[0]?.url 
+                                || (item.product as any).images?.[0]
+                                || "/api/placeholder/60/60"}
                               alt={item.product.name}
                               className="w-12 h-12 object-cover rounded border"
                             />
@@ -1007,7 +1031,7 @@ export const CheckoutPage = () => {
 
                   <Button
                     type="submit"
-                    className="w-full gradient-luxury"
+                    className="w-full bg-green-800 text-white hover:bg-green-900 font-semibold"
                     size="lg"
                     disabled={loading}
                   >
@@ -1018,7 +1042,14 @@ export const CheckoutPage = () => {
             </div>
           </div>
         </form>
-      </div>
+        </div>
+      </section>
+
+      {/* Footer with bg.png background */}
+      <Footer />
+
+      {/* Auth Sheet */}
+      <AuthSheet open={authSheetOpen} onOpenChange={setAuthSheetOpen} defaultMode={authMode} />
     </div>
   );
 };
