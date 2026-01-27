@@ -1,6 +1,7 @@
 import { useState, useEffect, FormEvent } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
+import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,14 +19,28 @@ import { computeDiscountedPrice } from "@/utils/pricing";
 interface Product {
   _id: string;
   name: string;
+  slug?: string;
   description: string;
   price: number;
+  stock?: number;
   discount: number | null;
   discount_amount?: number | null;
   discount_type?: "percentage" | "amount" | null;
-  image_url: string;
-  image_urls: string[];
-  category: { name: string };
+  image_url?: string | null;
+  image_urls?: string[];
+  images?: Array<{ url?: string; _id?: string }> | string[];
+  category?: {
+    _id?: string;
+    name: string;
+    slug?: string;
+    description?: string;
+  };
+  variants?: Array<{
+    _id?: string;
+    name: string;
+    price: number;
+    stock: number;
+  }>;
   selling_points?: string[] | null;
   shipping_information?: string | null;
 }
@@ -74,17 +89,32 @@ const ProductDetailPage = () => {
       if (!id) return;
 
       try {
-        // Fetch product details
+        // Fetch product details (new API structure with nested data + variants)
         const productResponse = await apiService.getProduct(id);
         if (!productResponse.success || !productResponse.data) {
           throw new Error(productResponse.message || "Failed to fetch product");
         }
 
-        // Fetch product variants
-        const variantsResponse = await apiService.getProductVariants(id);
-        if (!variantsResponse.success) {
-          throw new Error(variantsResponse.message || "Failed to fetch variants");
+        const raw = productResponse.data as any;
+        // Support different nesting levels: response.data.data.data or response.data.data or response.data
+        // Handle the nested structure: { success: true, data: { success: true, data: [...] } }
+        let productsData = raw;
+        if (raw?.data?.data && Array.isArray(raw.data.data)) {
+          // Nested structure: response.data.data.data
+          productsData = raw.data.data;
+        } else if (raw?.data && Array.isArray(raw.data)) {
+          // Direct array: response.data
+          productsData = raw.data;
+        } else if (Array.isArray(raw)) {
+          // Already an array
+          productsData = raw;
         }
+        
+        const primaryProduct: Product = Array.isArray(productsData)
+          ? (productsData[0] as Product)
+          : (productsData as Product);
+        
+        console.log('Parsed product:', primaryProduct);
 
         // Fetch product reviews
         const reviewsResponse = await apiService.getProductReviews(id);
@@ -92,8 +122,50 @@ const ProductDetailPage = () => {
           throw new Error(reviewsResponse.message || "Failed to fetch reviews");
         }
 
-        setProduct(productResponse.data);
-        setVariants(variantsResponse.data || []);
+        // Map variants from product payload (if present)
+        let mappedVariants: ProductVariant[] = [];
+        if (primaryProduct.variants && primaryProduct.variants.length > 0) {
+          mappedVariants = primaryProduct.variants.map((variant: any) => ({
+            _id: variant._id || `${primaryProduct._id}_${variant.name}`,
+            size: variant.name,
+            price: variant.price,
+            stock_quantity: variant.stock,
+          }));
+        } else {
+          // Fallback to legacy variants endpoint if needed
+          const variantsResponse = await apiService.getProductVariants(id);
+          if (variantsResponse.success && Array.isArray(variantsResponse.data)) {
+            mappedVariants = variantsResponse.data.map((variant: any) => ({
+              _id: variant._id,
+              size: variant.name || variant.size,
+              price: variant.price,
+              stock_quantity: variant.stock || variant.stock_quantity,
+            }));
+          }
+        }
+
+        // Extract images from the API response structure
+        let imageUrls: string[] = [];
+        if (primaryProduct.image_urls && Array.isArray(primaryProduct.image_urls)) {
+          imageUrls = primaryProduct.image_urls;
+        } else if (primaryProduct.images && Array.isArray(primaryProduct.images)) {
+          // Handle images array with objects: [{ url: "...", ... }] or string array
+          imageUrls = primaryProduct.images.map((img: any) => 
+            typeof img === 'string' ? img : (img.url || img.image_url || '')
+          ).filter(Boolean);
+        } else if (primaryProduct.image_url) {
+          imageUrls = [primaryProduct.image_url];
+        }
+        
+        // Update product with extracted image URLs
+        const updatedProduct = {
+          ...primaryProduct,
+          image_urls: imageUrls.length > 0 ? imageUrls : (primaryProduct.image_url ? [primaryProduct.image_url] : []),
+          image_url: imageUrls[0] || primaryProduct.image_url || null,
+        };
+        
+        setProduct(updatedProduct);
+        setVariants(mappedVariants);
         setReviews(reviewsResponse.data || []);
         
         if (reviewsResponse.data && reviewsResponse.data.length > 0 && user) {
@@ -104,8 +176,10 @@ const ProductDetailPage = () => {
         }
         
         // Set default variant if available
-        if (variantsResponse.data && variantsResponse.data.length > 0) {
-          const firstAvailable = variantsResponse.data.find((variant) => variant.stock_quantity > 0) ?? variantsResponse.data[0];
+        if (mappedVariants.length > 0) {
+          const firstAvailable =
+            mappedVariants.find((variant) => variant.stock_quantity > 0) ??
+            mappedVariants[0];
           setSelectedVariant(firstAvailable);
         }
         
@@ -345,14 +419,35 @@ const ProductDetailPage = () => {
   };
 
   return (
-    <div className="min-h-screen gradient-subtle">
-      <Header />
-      
-      <div className="container mx-auto px-4 py-8">
-        <Link to="/products" className="inline-flex items-center text-muted-foreground hover:text-primary mb-6">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Products
-        </Link>
+    <div className="min-h-screen">
+      {/* Header Section with bg-green.png background */}
+      <div
+        className="relative w-full"
+        style={{
+          backgroundImage: 'url(/bg-green.png)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+      >
+        <Header />
+      </div>
+
+      {/* Main Content Section - with bgWhite.png background */}
+      <section 
+        className="py-8 md:py-12 relative"
+        style={{
+          backgroundImage: 'url(/bgWhite.png)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+      >
+        <div className="container mx-auto px-4 py-8">
+          <Link to="/products" className="inline-flex items-center text-muted-foreground hover:text-primary mb-6">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Products
+          </Link>
 
         <div className="grid md:grid-cols-2 gap-12">
           {/* Product Images */}
@@ -412,14 +507,14 @@ const ProductDetailPage = () => {
             <div className="space-y-3">
               <div className="flex items-end gap-3">
                 <span className="text-3xl font-bold text-primary">
-                  Rs {pricing.finalPrice.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                  £{pricing.finalPrice.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                 </span>
                 {hasDiscount && (
                   <div className="flex items-center gap-2">
                     <span className="text-xl text-muted-foreground line-through">
-                      Rs {pricing.basePrice.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                      £{pricing.basePrice.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                     </span>
-                    <Badge variant="destructive">Save Rs {savingsAmount.toLocaleString('en-IN')}</Badge>
+                    <Badge variant="destructive">Save £{savingsAmount.toLocaleString('en-IN')}</Badge>
                   </div>
                 )}
               </div>
@@ -455,7 +550,7 @@ const ProductDetailPage = () => {
                     </SelectTrigger>
                     <SelectContent>
                       {variants.map((variant) => {
-                        const label = `${formatSize(variant.size)} - Rs ${variant.price.toFixed(2)}`;
+                        const label = `${formatSize(variant.size)} - £${variant.price.toFixed(2)}`;
                         const isDisabled = hasAvailableVariant && variant.stock_quantity === 0;
                         return (
                           <SelectItem key={variant._id} value={variant._id} disabled={isDisabled}>
@@ -658,7 +753,11 @@ const ProductDetailPage = () => {
             </Card>
           )}
         </div>
-      </div>
+        </div>
+      </section>
+
+      {/* Footer with bg-green.png background */}
+      <Footer />
     </div>
   );
 };

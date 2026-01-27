@@ -50,11 +50,11 @@ const ContactUs = () => {
 
   return (
     <div className="min-h-screen">
-      {/* Header Section with bg.png background */}
+      {/* Header Section with bg-green.png background */}
       <div
         className="relative w-full"
         style={{
-          backgroundImage: 'url(/bg.png)',
+          backgroundImage: 'url(/bg-green.png)',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat'
@@ -130,7 +130,7 @@ const ContactUs = () => {
         </div>
       </section>
 
-      {/* Footer with bg.png background */}
+      {/* Footer with bg-green.png background */}
       <Footer />
 
       {/* Auth Sheet */}

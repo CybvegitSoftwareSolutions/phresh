@@ -4,51 +4,29 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Building2, CheckCircle, Calendar, Users, MapPin, DollarSign, Package, Phone, Mail, User } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Building2, CheckCircle, Calendar, Users, MapPin, Phone, Mail, User, MessageSquare, Send } from "lucide-react";
 import { apiService } from "@/services/api";
 import { useToast } from "@/components/ui/use-toast";
 
 type CorporateOrder = {
   _id: string;
-  companyName: string;
-  contactPerson: {
-    name: string;
-    email: string;
-    phone: string;
-    position?: string;
-  };
-  deliveryAddress: {
-    street: string;
-    city: string;
-    state: string;
-    zipCode: string;
-    country: string;
-    instructions?: string;
-  };
-  orderDetails: {
-    eventDate: string;
-    eventType: string;
-    estimatedGuests: number;
-    specialRequirements?: string;
-  };
-  pricing: {
-    subtotal: number;
-    discount: number;
-    tax: number;
-    total: number;
-    quoteValidUntil: string;
-  };
-  items: Array<{
-    _id: string;
-    product: string;
-    quantity: number;
-    price: number;
-    total: number;
-    notes?: string;
+  name: string;
+  email: string;
+  phone: string;
+  purpose: string;
+  address: string;
+  number_of_people: number;
+  notes?: Array<{
+    _id?: string;
+    message: string;
+    isInternal: boolean;
+    createdAt?: string;
+    createdBy?: string;
   }>;
-  status: 'pending' | 'approved' | 'rejected' | 'resolved';
-  assignedTo?: string | null;
-  notes: string[];
+  status?: 'pending' | 'approved' | 'rejected' | 'resolved';
   createdAt: string;
   updatedAt: string;
 };
@@ -58,7 +36,8 @@ export const CorporateOrdersManagement = () => {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<CorporateOrder | null>(null);
-  const [productNames, setProductNames] = useState<Record<string, string>>({});
+  const [newNote, setNewNote] = useState("");
+  const [addingNote, setAddingNote] = useState(false);
   const { toast } = useToast();
 
   const load = async () => {
@@ -77,71 +56,22 @@ export const CorporateOrdersManagement = () => {
           ordersData = response.data.orders;
         }
         
-        // Map API response to our type
+        // Map API response to our type (new simplified structure)
         const mappedOrders: CorporateOrder[] = ordersData.map((order: any) => ({
           _id: order._id || order.id,
-          companyName: order.companyName || order.company_name || 'Unknown Company',
-          contactPerson: {
-            name: order.contactPerson?.name || order.name || 'Unknown',
-            email: order.contactPerson?.email || order.email || '',
-            phone: order.contactPerson?.phone || order.phone || '',
-            position: order.contactPerson?.position || order.position || undefined
-          },
-          deliveryAddress: {
-            street: order.deliveryAddress?.street || order.address?.street || '',
-            city: order.deliveryAddress?.city || order.address?.city || 'TBD',
-            state: order.deliveryAddress?.state || order.address?.state || 'TBD',
-            zipCode: order.deliveryAddress?.zipCode || order.address?.zipCode || '00000',
-            country: order.deliveryAddress?.country || order.address?.country || 'Pakistan',
-            instructions: order.deliveryAddress?.instructions || order.instructions || undefined
-          },
-          orderDetails: {
-            eventDate: order.orderDetails?.eventDate || order.eventDate || '',
-            eventType: order.orderDetails?.eventType || order.eventType || '',
-            estimatedGuests: order.orderDetails?.estimatedGuests || order.estimatedGuests || 0,
-            specialRequirements: order.orderDetails?.specialRequirements || order.specialRequirements || ''
-          },
-          pricing: {
-            subtotal: order.pricing?.subtotal || order.subtotal || 0,
-            discount: order.pricing?.discount || order.discount || 0,
-            tax: order.pricing?.tax || order.tax || 0,
-            total: order.pricing?.total || order.total || 0,
-            quoteValidUntil: order.pricing?.quoteValidUntil || order.quoteValidUntil || ''
-          },
-          items: order.items || [],
-          status: order.status || 'pending',
-          assignedTo: order.assignedTo || null,
+          name: order.name || order.contactPerson?.name || 'Unknown',
+          email: order.email || order.contactPerson?.email || '',
+          phone: order.phone || order.contactPerson?.phone || '',
+          purpose: order.purpose || order.orderDetails?.eventType || '',
+          address: order.address || order.deliveryAddress?.street || '',
+          number_of_people: order.number_of_people || order.orderDetails?.estimatedGuests || 0,
           notes: order.notes || [],
+          status: order.status || 'pending',
           createdAt: order.createdAt || order.created_at || new Date().toISOString(),
           updatedAt: order.updatedAt || order.updated_at || order.createdAt || new Date().toISOString()
         }));
         
         setOrders(mappedOrders);
-        
-        // Fetch product names for items
-        const productIds = new Set<string>();
-        mappedOrders.forEach(order => {
-          order.items.forEach(item => {
-            if (item.product) productIds.add(item.product);
-          });
-        });
-        
-        if (productIds.size > 0) {
-          try {
-            const productsResponse = await apiService.getAllProducts();
-            if (productsResponse.success && productsResponse.data) {
-              const productsData = productsResponse.data.data || productsResponse.data.products || productsResponse.data;
-              const products = Array.isArray(productsData) ? productsData : [];
-              const namesMap: Record<string, string> = {};
-              products.forEach((product: any) => {
-                if (product._id) namesMap[product._id] = product.name || 'Unknown Product';
-              });
-              setProductNames(namesMap);
-            }
-          } catch (e) {
-            console.warn('Failed to fetch product names:', e);
-          }
-        }
       } else {
         throw new Error(response.message || "Failed to fetch corporate orders");
       }
@@ -170,12 +100,54 @@ export const CorporateOrdersManagement = () => {
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 0 }).format(amount);
-  };
 
-  const formatEventType = (eventType: string) => {
-    return eventType.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+  const handleAddNote = async () => {
+    if (!selected || !newNote.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a note message',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setAddingNote(true);
+    try {
+      const response = await apiService.addCorporateOrderNote(selected._id, {
+        message: newNote.trim(),
+        isInternal: true
+      });
+
+      if (response.success) {
+        toast({
+          title: 'Success',
+          description: 'Note added successfully'
+        });
+        setNewNote("");
+        // Reload orders to get updated notes
+        load();
+        // Update selected order with new note
+        if (selected) {
+          const updatedNotes = selected.notes || [];
+          updatedNotes.push({
+            message: newNote.trim(),
+            isInternal: true,
+            createdAt: new Date().toISOString()
+          });
+          setSelected({ ...selected, notes: updatedNotes });
+        }
+      } else {
+        throw new Error(response.message || 'Failed to add note');
+      }
+    } catch (e: any) {
+      toast({
+        title: 'Error',
+        description: e.message || 'Failed to add note',
+        variant: 'destructive'
+      });
+    } finally {
+      setAddingNote(false);
+    }
   };
 
   return (
@@ -211,59 +183,39 @@ export const CorporateOrdersManagement = () => {
                   <div className="flex-1">
                     <CardTitle className="text-xl flex items-center gap-2 mb-2">
                       <Building2 className="h-5 w-5 text-primary" />
-                      {order.companyName}
+                      {order.name}
                     </CardTitle>
                     <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                       <span className="flex items-center gap-1">
-                        <User className="h-3 w-3" />
-                        {order.contactPerson.name}
-                      </span>
-                      <span className="flex items-center gap-1">
                         <Mail className="h-3 w-3" />
-                        {order.contactPerson.email}
+                        {order.email}
                       </span>
                       <span className="flex items-center gap-1">
                         <Phone className="h-3 w-3" />
-                        {order.contactPerson.phone}
+                        {order.phone}
                       </span>
+                      {order.number_of_people > 0 && (
+                        <span className="flex items-center gap-1">
+                          <Users className="h-3 w-3" />
+                          {order.number_of_people} people
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                    {getStatusBadge(order.status)}
-                    {order.pricing.total > 0 && (
-                      <div className="text-sm font-semibold text-primary">
-                        {formatCurrency(order.pricing.total)}
-                      </div>
-                    )}
+                    {getStatusBadge(order.status || 'pending')}
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                    {order.orderDetails.eventDate && (
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Calendar className="h-4 w-4" />
-                        <span>Event: {new Date(order.orderDetails.eventDate).toLocaleDateString()}</span>
-                      </div>
-                    )}
-                    {order.orderDetails.estimatedGuests > 0 && (
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Users className="h-4 w-4" />
-                        <span>{order.orderDetails.estimatedGuests} guests</span>
-                      </div>
-                    )}
-                    {order.items.length > 0 && (
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Package className="h-4 w-4" />
-                        <span>{order.items.length} item{order.items.length !== 1 ? 's' : ''}</span>
-                      </div>
-                    )}
-                  </div>
-                  {order.deliveryAddress.street && (
+                  {order.purpose && (
+                    <div className="text-sm text-muted-foreground">
+                      <strong>Purpose:</strong> {order.purpose}
+                    </div>
+                  )}
+                  {order.address && (
                     <div className="flex items-start gap-2 text-sm text-muted-foreground">
                       <MapPin className="h-4 w-4 mt-0.5" />
-                      <span>
-                        {order.deliveryAddress.street}, {order.deliveryAddress.city}, {order.deliveryAddress.state}
-                      </span>
+                      <span>{order.address}</span>
                     </div>
                   )}
                   <div className="text-xs text-muted-foreground">
@@ -295,62 +247,35 @@ export const CorporateOrdersManagement = () => {
           </DialogHeader>
           {selected && (
             <div className="space-y-6">
-              {/* Company & Contact Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Building2 className="h-4 w-4" />
-                      Company Information
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div>
-                      <strong className="text-sm text-muted-foreground">Company Name:</strong>
-                      <p className="font-semibold">{selected.companyName}</p>
-                    </div>
-                    <div>
-                      <strong className="text-sm text-muted-foreground">Status:</strong>
-                      <div className="mt-1">{getStatusBadge(selected.status)}</div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <User className="h-4 w-4" />
-                      Contact Person
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div>
-                      <strong className="text-sm text-muted-foreground">Name:</strong>
-                      <p>{selected.contactPerson.name}</p>
-                    </div>
-                    {selected.contactPerson.position && (
-                      <div>
-                        <strong className="text-sm text-muted-foreground">Position:</strong>
-                        <p>{selected.contactPerson.position}</p>
-                      </div>
-                    )}
-                    <div>
-                      <strong className="text-sm text-muted-foreground">Email:</strong>
-                      <p className="flex items-center gap-1">
-                        <Mail className="h-3 w-3" />
-                        {selected.contactPerson.email}
-                      </p>
-                    </div>
-                    <div>
-                      <strong className="text-sm text-muted-foreground">Phone:</strong>
-                      <p className="flex items-center gap-1">
-                        <Phone className="h-3 w-3" />
-                        {selected.contactPerson.phone}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+              {/* Contact Person */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    Contact Person
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div>
+                    <strong className="text-sm text-muted-foreground">Name:</strong>
+                    <p>{selected.name}</p>
+                  </div>
+                  <div>
+                    <strong className="text-sm text-muted-foreground">Email:</strong>
+                    <p className="flex items-center gap-1">
+                      <Mail className="h-3 w-3" />
+                      {selected.email}
+                    </p>
+                  </div>
+                  <div>
+                    <strong className="text-sm text-muted-foreground">Phone:</strong>
+                    <p className="flex items-center gap-1">
+                      <Phone className="h-3 w-3" />
+                      {selected.phone}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
 
               {/* Delivery Address */}
               <Card>
@@ -360,22 +285,8 @@ export const CorporateOrdersManagement = () => {
                     Delivery Address
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-2">
-                  <div>
-                    <p className="font-medium">
-                      {selected.deliveryAddress.street || 'N/A'}
-                    </p>
-                    <p className="text-muted-foreground">
-                      {selected.deliveryAddress.city}, {selected.deliveryAddress.state} {selected.deliveryAddress.zipCode}
-                    </p>
-                    <p className="text-muted-foreground">{selected.deliveryAddress.country}</p>
-                  </div>
-                  {selected.deliveryAddress.instructions && (
-                    <div className="mt-3 pt-3 border-t">
-                      <strong className="text-sm text-muted-foreground">Instructions:</strong>
-                      <p className="text-sm">{selected.deliveryAddress.instructions}</p>
-                    </div>
-                  )}
+                <CardContent>
+                  <p className="font-medium">{selected.address || 'N/A'}</p>
                 </CardContent>
               </Card>
 
@@ -387,107 +298,85 @@ export const CorporateOrdersManagement = () => {
                     Event Details
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {selected.orderDetails.eventDate && (
+                <CardContent className="space-y-2">
+                  {selected.purpose && (
                     <div>
-                      <strong className="text-sm text-muted-foreground">Event Date:</strong>
-                      <p>{new Date(selected.orderDetails.eventDate).toLocaleString()}</p>
+                      <strong className="text-sm text-muted-foreground">Purpose:</strong>
+                      <p>{selected.purpose}</p>
                     </div>
                   )}
-                  {selected.orderDetails.eventType && (
+                  {selected.number_of_people > 0 && (
                     <div>
-                      <strong className="text-sm text-muted-foreground">Event Type:</strong>
-                      <p>{formatEventType(selected.orderDetails.eventType)}</p>
-                    </div>
-                  )}
-                  {selected.orderDetails.estimatedGuests > 0 && (
-                    <div>
-                      <strong className="text-sm text-muted-foreground">Estimated Guests:</strong>
+                      <strong className="text-sm text-muted-foreground">Number of People:</strong>
                       <p className="flex items-center gap-1">
                         <Users className="h-4 w-4" />
-                        {selected.orderDetails.estimatedGuests}
+                        {selected.number_of_people}
                       </p>
-                    </div>
-                  )}
-                  {selected.orderDetails.specialRequirements && (
-                    <div className="md:col-span-2">
-                      <strong className="text-sm text-muted-foreground">Special Requirements:</strong>
-                      <p>{selected.orderDetails.specialRequirements}</p>
                     </div>
                   )}
                 </CardContent>
               </Card>
 
-              {/* Order Items */}
-              {selected.items.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Package className="h-4 w-4" />
-                      Order Items ({selected.items.length})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
+              {/* Notes Section */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4" />
+                    Notes
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Existing Notes */}
+                  {selected.notes && selected.notes.length > 0 ? (
                     <div className="space-y-3">
-                      {selected.items.map((item, index) => (
-                        <div key={item._id || index} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div className="flex-1">
-                            <p className="font-medium">
-                              {productNames[item.product] || `Product ${item.product}`}
-                            </p>
-                            {item.notes && (
-                              <p className="text-sm text-muted-foreground">{item.notes}</p>
-                            )}
-                            <p className="text-sm text-muted-foreground mt-1">
-                              Quantity: {item.quantity} × {formatCurrency(item.price)} = {formatCurrency(item.total)}
-                            </p>
+                      {selected.notes.map((note, index) => (
+                        <div key={note._id || index} className="p-3 bg-muted rounded-lg">
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              {note.isInternal && (
+                                <Badge variant="outline" className="text-xs">Internal</Badge>
+                              )}
+                              {note.createdAt && (
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(note.createdAt).toLocaleString()}
+                                </span>
+                              )}
+                            </div>
                           </div>
+                          <p className="text-sm">{note.message}</p>
                         </div>
                       ))}
                     </div>
-                  </CardContent>
-                </Card>
-              )}
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No notes yet</p>
+                  )}
 
-              {/* Pricing Summary */}
-              {(selected.pricing.subtotal > 0 || selected.pricing.total > 0) && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <DollarSign className="h-4 w-4" />
-                      Pricing Summary
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Subtotal:</span>
-                      <span className="font-medium">{formatCurrency(selected.pricing.subtotal)}</span>
+                  <Separator />
+
+                  {/* Add Note Form */}
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="note-message">Add Note</Label>
+                      <Textarea
+                        id="note-message"
+                        value={newNote}
+                        onChange={(e) => setNewNote(e.target.value)}
+                        placeholder="Enter your note here..."
+                        rows={3}
+                        className="mt-2"
+                      />
                     </div>
-                    {selected.pricing.discount > 0 && (
-                      <div className="flex justify-between text-green-600">
-                        <span>Discount:</span>
-                        <span>-{formatCurrency(selected.pricing.discount)}</span>
-                      </div>
-                    )}
-                    {selected.pricing.tax > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Tax:</span>
-                        <span>{formatCurrency(selected.pricing.tax)}</span>
-                      </div>
-                    )}
-                    <Separator />
-                    <div className="flex justify-between text-lg font-bold">
-                      <span>Total:</span>
-                      <span className="text-primary">{formatCurrency(selected.pricing.total)}</span>
-                    </div>
-                    {selected.pricing.quoteValidUntil && (
-                      <div className="text-xs text-muted-foreground mt-2">
-                        Quote valid until: {new Date(selected.pricing.quoteValidUntil).toLocaleDateString()}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
+                    <Button
+                      onClick={handleAddNote}
+                      disabled={addingNote || !newNote.trim()}
+                      className="w-full"
+                    >
+                      <Send className="h-4 w-4 mr-2" />
+                      {addingNote ? 'Adding...' : 'Add Note'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
 
               {/* Timestamps */}
               <div className="flex justify-between text-xs text-muted-foreground pt-2 border-t">
@@ -521,6 +410,9 @@ export const CorporateOrdersManagement = () => {
                 Mark as Resolved
               </Button>
             )}
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Close
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

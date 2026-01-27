@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Minus, Plus, Trash2, ShoppingBag } from "lucide-react";
+import { Minus, Plus, Trash2, ShoppingBag, Droplet } from "lucide-react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { apiService } from "@/services/api";
@@ -66,7 +66,18 @@ export const CartPage = () => {
 
   return (
     <div className="min-h-screen">
-      <Header />
+      {/* Header Section with bg-green.png background */}
+      <div
+        className="relative w-full"
+        style={{
+          backgroundImage: 'url(/bg-green.png)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+      >
+        <Header />
+      </div>
       
       {/* Cart Content Section - white background */}
       <section className="py-16 bg-white min-h-screen">
@@ -98,18 +109,24 @@ export const CartPage = () => {
                 const primaryImage = (item.product as any).image_urls?.[0] 
                   || item.product.image_url 
                   || (item.product as any).images?.[0]?.url 
-                  || (item.product as any).images?.[0]
-                  || "/api/placeholder/300/300";
+                  || (item.product as any).images?.[0];
+                const hasImage = !!primaryImage;
                 
                 return (
                   <Card key={item._id} className="shadow-md border-gray-200">
                     <CardContent className="flex flex-col gap-4 p-4 sm:p-6">
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-4">
-                        <img
-                          src={primaryImage}
-                          alt={item.product.name}
-                          className="h-32 w-32 rounded-lg object-cover sm:h-28 sm:w-28"
-                        />
+                        {hasImage ? (
+                          <img
+                            src={primaryImage}
+                            alt={item.product.name}
+                            className="h-32 w-32 rounded-lg object-cover sm:h-28 sm:w-28"
+                          />
+                        ) : (
+                          <div className="h-32 w-32 rounded-lg bg-green-100 flex items-center justify-center sm:h-28 sm:w-28">
+                            <Droplet className="h-16 w-16 text-green-600 sm:h-14 sm:w-14" />
+                          </div>
+                        )}
 
                         <div className="flex-1 space-y-2">
                           <h3 className="font-semibold text-lg text-gray-900">
@@ -134,9 +151,9 @@ export const CartPage = () => {
                                   pricing.discountType === "amount" ? "Sale" : pricing.discountLabel;
                                 return (
                                   <>
-                                    <span className="font-bold text-lg text-gray-900">Rs {formatCurrency(pricing.finalPrice)}</span>
+                                    <span className="font-bold text-lg text-gray-900">£{formatCurrency(pricing.finalPrice)}</span>
                                     <span className="text-sm text-gray-500 line-through">
-                                      Rs {formatCurrency(pricing.basePrice)}
+                                      £{formatCurrency(pricing.basePrice)}
                                     </span>
                                     {badgeText && (
                                       <Badge className="text-xs bg-green-800 text-white">
@@ -146,7 +163,7 @@ export const CartPage = () => {
                                   </>
                                 );
                               }
-                              return <span className="font-bold text-lg text-gray-900">Rs {formatCurrency(pricing.basePrice)}</span>;
+                              return <span className="font-bold text-lg text-gray-900">£{formatCurrency(pricing.basePrice)}</span>;
                             })()}
                           </div>
                         </div>
@@ -204,23 +221,69 @@ export const CartPage = () => {
                     <CardTitle className="text-xl text-gray-900">Order Summary</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4 p-6">
-                    <div className="space-y-3">
+                    {/* Cart Items List */}
+                    <div className="space-y-3 max-h-64 overflow-y-auto">
+                      {items.map((item) => {
+                        // Get primary image
+                        const primaryImage = (item.product as any).image_urls?.[0] 
+                          || item.product.image_url 
+                          || (item.product as any).images?.[0]?.url 
+                          || (item.product as any).images?.[0];
+                        const hasImage = !!primaryImage;
+                        
+                        const basePrice = item.variant_price ?? item.product.price;
+                        const pricing = computeDiscountedPrice(item.product, basePrice);
+                        const lineTotal = pricing.finalPrice * item.quantity;
+
+                        return (
+                          <div key={item._id} className="flex items-start space-x-3 pb-3 border-b last:border-b-0">
+                            <div className="relative">
+                              {hasImage ? (
+                                <img
+                                  src={primaryImage}
+                                  alt={item.product.name}
+                                  className="w-12 h-12 object-cover rounded border"
+                                />
+                              ) : (
+                                <div className="w-12 h-12 rounded border bg-green-100 flex items-center justify-center">
+                                  <Droplet className="h-6 w-6 text-green-600" />
+                                </div>
+                              )}
+                              <div className="absolute -top-2 -right-2 bg-green-800 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-semibold">
+                                {item.quantity}
+                              </div>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900">{item.product.name}</p>
+                              {item.variant_size && (
+                                <p className="text-xs text-gray-500">{item.variant_size}</p>
+                              )}
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-semibold text-gray-900">£{formatCurrency(lineTotal)}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="space-y-3 pt-2">
                       <div className="flex justify-between text-gray-700">
                         <span>Subtotal ({itemCount} items)</span>
-                        <span className="font-semibold">Rs {formatCurrency(subtotal)}</span>
+                        <span className="font-semibold">£{formatCurrency(subtotal)}</span>
                       </div>
                       <div className="flex justify-between text-gray-700">
                         <span>Shipping</span>
                         {isFreeShipping ? (
                           <span className="text-green-800 font-semibold">Free</span>
                         ) : (
-                          <span className="font-semibold">Rs {formatCurrency(shippingCharge)}</span>
+                          <span className="font-semibold">£{formatCurrency(shippingCharge)}</span>
                         )}
                       </div>
                       <div className="border-t border-gray-300 pt-3 mt-3">
                         <div className="flex justify-between font-bold text-lg text-gray-900">
                           <span>Total</span>
-                          <span>Rs {formatCurrency(finalTotal)}</span>
+                          <span>£{formatCurrency(finalTotal)}</span>
                         </div>
                       </div>
                     </div>
@@ -248,7 +311,7 @@ export const CartPage = () => {
         </div>
       </section>
 
-      {/* Footer with bg.png background */}
+      {/* Footer with bg-green.png background */}
       <Footer />
 
       {/* Auth Sheet */}

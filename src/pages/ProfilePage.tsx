@@ -500,7 +500,7 @@ export const ProfilePage = () => {
                                       <div className="flex-1">
                                         <p className="text-sm font-medium">{item.product?.name || 'Product'}</p>
                                         <p className="text-xs text-muted-foreground">
-                                          Qty: {item.quantity} × Rs {Math.round(Number(itemPrice)).toLocaleString('en-IN')}
+                                          Qty: {item.quantity} × £{Math.round(Number(itemPrice)).toLocaleString('en-IN')}
                                         </p>
                                       </div>
                                     </div>
@@ -513,7 +513,7 @@ export const ProfilePage = () => {
                           <div className="flex items-center justify-between pt-4 border-t">
                             <div>
                               <p className="text-lg font-bold">
-                                Total: Rs {Math.round(Number(order.total_amount) || 0).toLocaleString('en-IN')}
+                                Total: £{Math.round(Number(order.total_amount) || 0).toLocaleString('en-IN')}
                               </p>
                             </div>
                             <div className="flex space-x-2">

@@ -4,7 +4,7 @@
 // const isBrowser = typeof window !== 'undefined';
 // const isLocalhost = isBrowser && (/^localhost$|^127\.0\.0\.1$|^\[::1\]$/.test(window.location.hostname));
 // const FALLBACK_BASE_URL = isLocalhost ? 'http://localhost:8712' : 'https://phresh-backend.droptech.io';
-const API_BASE_URL = 'https://phresh-backend.droptech.io';
+const API_BASE_URL = 'https://api.phresh.droptech.io';
 // const API_BASE_URL = 'http://localhost:8712';
 
 interface ApiResponse<T = any> {
@@ -342,98 +342,57 @@ class ApiService {
     discount_amount?: number;
     tags?: string[];
   }, imageFiles?: File[]) {
-    // Create FormData for multipart/form-data
-    const formData = new FormData();
-
-    // Add text fields
-    formData.append('name', productData.name);
-    formData.append('description', productData.description);
-    formData.append('price', productData.price.toString());
-    formData.append('stock', productData.stock.toString());
-
     // Category is required - must be a valid ObjectId
     if (!productData.category || (typeof productData.category === 'string' && productData.category.trim() === '')) {
       throw new Error('Category is required and must be a valid ObjectId');
     }
-    formData.append('category', productData.category.toString());
 
-    if (productData.image_url) {
-      formData.append('image_url', productData.image_url);
-    }
-
-    if (productData.image_urls && productData.image_urls.length > 0) {
-      productData.image_urls.forEach((url, index) => {
-        formData.append(`image_urls[${index}]`, url);
-      });
-    }
-
-    if (productData.is_featured !== undefined) {
-      formData.append('is_featured', productData.is_featured.toString());
-    }
-
-    if (productData.selling_points && productData.selling_points.length > 0) {
-      productData.selling_points.forEach((point, index) => {
-        formData.append(`selling_points[${index}]`, point);
-      });
-    }
-
-    if (productData.shipping_information) {
-      formData.append('shipping_information', productData.shipping_information);
-    }
-
-    if (productData.discount !== undefined) {
-      formData.append('discount', productData.discount.toString());
-    }
-
-    if (productData.discount_type) {
-      formData.append('discount_type', productData.discount_type);
-    }
-
-    if (productData.discount_amount !== undefined) {
-      formData.append('discount_amount', productData.discount_amount.toString());
-    }
-
-    if (productData.tags && productData.tags.length > 0) {
-      productData.tags.forEach((tag, index) => {
-        formData.append(`tags[${index}]`, tag);
-      });
-    }
-
-    // Add image files if provided
-    if (imageFiles && imageFiles.length > 0) {
-      imageFiles.forEach((file) => {
-        formData.append('images', file);
-      });
-    }
-
-    // Send as multipart/form-data (don't set Content-Type header, browser will set it with boundary)
-    const url = `${this.baseURL}/api/products`;
-    const headers: HeadersInit = {};
-
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
-    }
-
-    // Don't set Content-Type - browser will automatically set it with boundary for FormData
-    const config: RequestInit = {
-      method: 'POST',
-      headers,
-      body: formData,
+    // Build JSON body matching the curl command structure
+    const jsonBody: Record<string, any> = {
+      name: productData.name,
+      description: productData.description,
+      price: productData.price,
+      stock: productData.stock,
+      category: productData.category.toString(),
+      discount: productData.discount !== undefined ? productData.discount : 0,
+      discount_type: productData.discount_type || 'percentage',
+      discount_amount: productData.discount_amount !== undefined ? productData.discount_amount : 0,
+      is_featured: productData.is_featured !== undefined ? productData.is_featured : false,
     };
 
-    try {
-      const response = await fetch(url, config);
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Request failed');
-      }
-
-      return data;
-    } catch (error) {
-      console.error('API Request failed:', error);
-      throw error;
+    // Add image_url if provided
+    if (productData.image_url) {
+      jsonBody.image_url = productData.image_url;
     }
+
+    // Add image_urls array (must be an array)
+    if (productData.image_urls && productData.image_urls.length > 0) {
+      jsonBody.image_urls = productData.image_urls;
+    } else if (productData.image_url) {
+      // If only image_url is provided, use it as image_urls array
+      jsonBody.image_urls = [productData.image_url];
+    }
+
+    // Add selling_points array if provided
+    if (productData.selling_points && productData.selling_points.length > 0) {
+      jsonBody.selling_points = productData.selling_points;
+    }
+
+    // Add shipping_information if provided
+    if (productData.shipping_information) {
+      jsonBody.shipping_information = productData.shipping_information;
+    }
+
+    // Add tags if provided
+    if (productData.tags && productData.tags.length > 0) {
+      jsonBody.tags = productData.tags;
+    }
+
+    // Use the standard request method which sends JSON
+    return this.request('/api/products', {
+      method: 'POST',
+      body: JSON.stringify(jsonBody),
+    });
   }
 
   async updateProduct(productId: string, productData: {
@@ -491,6 +450,16 @@ class ApiService {
     return this.request('/api/orders', {
       method: 'POST',
       body: JSON.stringify(orderData),
+    });
+  }
+
+  async createPaymentIntent(data: {
+    orderId: string;
+    currency: string;
+  }) {
+    return this.request('/api/payments/create-intent', {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   }
 
@@ -563,18 +532,61 @@ class ApiService {
   }
 
   async getAllCategories() {
-    return this.request('/api/categories');
+    return this.request('/api/products/categories');
   }
 
   async createCategory(categoryData: {
     name: string;
-    slug?: string;
     description?: string;
+    image?: File;
+    isActive?: boolean;
+    sortOrder?: number;
+    showOnHomepage?: boolean;
+    homepageOrder?: number;
+    parentCategory?: string;
+    seoTitle?: string;
+    seoDescription?: string;
   }) {
-    return this.request('/api/categories', {
+    const formData = new FormData();
+    formData.append('name', categoryData.name);
+    
+    if (categoryData.description) {
+      formData.append('description', categoryData.description);
+    }
+    if (categoryData.image) {
+      formData.append('image', categoryData.image);
+    }
+    if (categoryData.isActive !== undefined) {
+      formData.append('isActive', categoryData.isActive.toString());
+    }
+    if (categoryData.sortOrder !== undefined) {
+      formData.append('sortOrder', categoryData.sortOrder.toString());
+    }
+    if (categoryData.showOnHomepage !== undefined) {
+      formData.append('showOnHomepage', categoryData.showOnHomepage.toString());
+    }
+    if (categoryData.homepageOrder !== undefined) {
+      formData.append('homepageOrder', categoryData.homepageOrder.toString());
+    }
+    if (categoryData.parentCategory) {
+      formData.append('parentCategory', categoryData.parentCategory);
+    }
+    if (categoryData.seoTitle) {
+      formData.append('seoTitle', categoryData.seoTitle);
+    }
+    if (categoryData.seoDescription) {
+      formData.append('seoDescription', categoryData.seoDescription);
+    }
+
+    const response = await fetch(`${this.baseURL}/api/admin/categories`, {
       method: 'POST',
-      body: JSON.stringify(categoryData),
+      headers: {
+        'Authorization': `Bearer ${this.token}`,
+      },
+      body: formData,
     });
+
+    return response.json();
   }
 
   async updateCategory(categoryId: string, categoryData: {
@@ -589,7 +601,7 @@ class ApiService {
   }
 
   async deleteCategory(categoryId: string) {
-    return this.request(`/api/categories/${categoryId}`, {
+    return this.request(`/api/admin/categories/${categoryId}`, {
       method: 'DELETE',
     });
   }
@@ -635,32 +647,12 @@ class ApiService {
   }
 
   async submitCorporateOrder(corporateData: {
-    companyName: string;
-    contactPerson: {
-      name: string;
-      email: string;
-      phone: string;
-      position: string;
-    };
-    deliveryAddress: {
-      street: string;
-      city: string;
-      state: string;
-      zipCode: string;
-      country: string;
-    };
-    orderDetails: {
-      eventDate: string;
-      eventType: string;
-      estimatedGuests: number;
-      specialRequirements?: string;
-    };
-    items: Array<{
-      product: string;
-      quantity: number;
-      price: number;
-      notes?: string;
-    }>;
+    name: string;
+    email: string;
+    phone: string;
+    purpose: string;
+    address: string;
+    number_of_people: number;
   }) {
     return this.request('/api/contact/corporate', {
       method: 'POST',
@@ -690,6 +682,13 @@ class ApiService {
     return this.request(`/api/admin/corporate-orders/${orderId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status }),
+    });
+  }
+
+  async addCorporateOrderNote(orderId: string, noteData: { message: string; isInternal: boolean }) {
+    return this.request(`/api/admin/corporate-orders/${orderId}/notes`, {
+      method: 'POST',
+      body: JSON.stringify(noteData),
     });
   }
 
@@ -783,6 +782,72 @@ class ApiService {
   // Carousel methods
   async getCarouselItems() {
     return this.request('/api/carousel');
+  }
+
+  async createCarouselItem(carouselData: {
+    title?: string;
+    subtitle?: string;
+    image?: File | null;
+    image_url?: string;
+    link_url?: string;
+    product_id?: string | null;
+    video_url?: string | null;
+    isActive?: boolean;
+  }) {
+    const formData = new FormData();
+    if (carouselData.title) formData.append('title', carouselData.title);
+    if (carouselData.subtitle) formData.append('subtitle', carouselData.subtitle);
+    if (carouselData.image) formData.append('image', carouselData.image);
+    if (carouselData.image_url && !carouselData.image) formData.append('image_url', carouselData.image_url);
+    if (carouselData.link_url) formData.append('link_url', carouselData.link_url);
+    if (carouselData.product_id) formData.append('product_id', carouselData.product_id);
+    if (carouselData.video_url) formData.append('video_url', carouselData.video_url);
+    if (carouselData.isActive !== undefined) formData.append('isActive', String(carouselData.isActive));
+
+    return this.request('/api/admin/carousel', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        // Do NOT set Content-Type header for FormData, browser sets it automatically with boundary
+      },
+    });
+  }
+
+  async updateCarouselItem(carouselId: string, carouselData: {
+    title?: string;
+    subtitle?: string;
+    image?: File | null;
+    image_url?: string;
+    link_url?: string;
+    product_id?: string | null;
+    video_url?: string | null;
+    isActive?: boolean;
+    order_position?: number;
+  }) {
+    const formData = new FormData();
+    if (carouselData.title !== undefined) formData.append('title', carouselData.title);
+    if (carouselData.subtitle !== undefined) formData.append('subtitle', carouselData.subtitle);
+    if (carouselData.image) formData.append('image', carouselData.image);
+    if (carouselData.image_url && !carouselData.image) formData.append('image_url', carouselData.image_url);
+    if (carouselData.link_url !== undefined) formData.append('link_url', carouselData.link_url || '');
+    if (carouselData.product_id !== undefined) formData.append('product_id', carouselData.product_id || '');
+    if (carouselData.video_url !== undefined) formData.append('video_url', carouselData.video_url || '');
+    if (carouselData.isActive !== undefined) formData.append('isActive', String(carouselData.isActive));
+    if (carouselData.order_position !== undefined) formData.append('order_position', String(carouselData.order_position));
+
+    return this.request(`/api/admin/carousel/${carouselId}`, {
+      method: 'PUT',
+      body: formData,
+      headers: {
+        // Do NOT set Content-Type header for FormData, browser sets it automatically with boundary
+      },
+    });
+  }
+
+  async deleteCarouselItem(carouselId: string) {
+    return this.request(`/api/admin/carousel/${carouselId}`, {
+      method: 'DELETE',
+    });
   }
 
   // Announcement methods

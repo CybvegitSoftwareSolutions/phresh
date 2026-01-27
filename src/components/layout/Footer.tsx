@@ -32,7 +32,7 @@ export const Footer = () => {
     <footer 
       className="text-white py-12"
       style={{
-        backgroundImage: 'url(/bg.png)',
+        backgroundImage: 'url(/bg-green.png)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat'

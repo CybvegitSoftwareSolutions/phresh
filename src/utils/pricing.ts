@@ -19,7 +19,7 @@ export interface DiscountComputation {
 
 const formatAmountLabel = (value: number) => {
   const rounded = Math.round(Math.max(value, 0));
-  return `-Rs ${rounded.toLocaleString("en-IN")}`;
+  return `-£${rounded.toLocaleString("en-IN")}`;
 };
 
 /**

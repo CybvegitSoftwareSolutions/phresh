@@ -122,7 +122,7 @@ export const ShippingManagement = () => {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="standard">Delivery Charges (Rs)</Label>
+              <Label htmlFor="standard">Delivery Charges (£)</Label>
               <Input
                 id="standard"
                 type="number"
@@ -145,7 +145,7 @@ export const ShippingManagement = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="threshold">Free Delivery Threshold (Rs)</Label>
+              <Label htmlFor="threshold">Free Delivery Threshold (£)</Label>
               <Input
                 id="threshold"
                 type="number"
@@ -196,9 +196,9 @@ export const ShippingManagement = () => {
         <CardContent className="p-4">
           <h3 className="font-semibold mb-2">Current Settings Preview</h3>
           <div className="text-sm text-muted-foreground space-y-1">
-            <p>• Standard shipping: Rs {formData.standard_shipping_charge}</p>
-            <p>• Express shipping: Rs {formData.express_shipping_charge}</p>
-            <p>• Free shipping for orders above: Rs {formData.free_shipping_threshold}</p>
+            <p>• Standard shipping: £{formData.standard_shipping_charge}</p>
+            <p>• Express shipping: £{formData.express_shipping_charge}</p>
+            <p>• Free shipping for orders above: £{formData.free_shipping_threshold}</p>
           </div>
         </CardContent>
       </Card>

@@ -6,18 +6,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2, Plus, Edit, Trash2, ImageIcon, Eye, EyeOff } from "lucide-react";
+import { Loader2, Plus, Edit, Trash2, ImageIcon, Eye, EyeOff, ArrowUp, ArrowDown } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 
 interface CarouselSlide {
   _id: string;
-  title: string | null;
+  title?: string | null;
+  subtitle?: string | null;
   image_url: string;
   link_url?: string;
   product_id?: string | null;
   video_url?: string | null;
-  order_position: number;
-  is_active: boolean;
+  order_position?: number;
+  sortOrder?: number;
+  is_active?: boolean;
+  isActive?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -30,14 +34,15 @@ export function CarouselManagement() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
+    subtitle: "",
     image_url: "",
+    imageFile: null as File | null,
     link_url: "",
     product_id: "",
     video_url: "",
-    is_active: true
+    isActive: true
   });
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [saveLoading, setSaveLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [autoplayEnabled, setAutoplayEnabled] = useState(true);
@@ -94,10 +99,10 @@ export function CarouselManagement() {
   }
 
   const handleSave = async () => {
-    if (!formData.image_url && !formData.video_url) {
+    if (!formData.imageFile && !formData.image_url && !formData.video_url) {
       toast({
         title: "Validation Error",
-        description: "Provide either an image URL or a video URL for the slide.",
+        description: "Please provide an image (upload or URL) or a video URL for the slide.",
         variant: "destructive"
       });
       return;
@@ -105,24 +110,22 @@ export function CarouselManagement() {
 
     setSaveLoading(true);
     try {
-      const slideData = {
-        title: formData.title || null,
-        image_url: formData.image_url,
-        link_url: formData.link_url || null,
-        product_id: formData.product_id ? formData.product_id : null,
-        video_url: formData.video_url ? formData.video_url : null,
-        is_active: formData.is_active
+      const slideData: any = {
+        title: formData.title || undefined,
+        subtitle: formData.subtitle || undefined,
+        image: formData.imageFile || undefined,
+        image_url: formData.image_url || undefined,
+        link_url: formData.link_url || undefined,
+        product_id: formData.product_id || undefined,
+        video_url: formData.video_url || undefined,
+        isActive: formData.isActive
       };
 
       let response;
       if (editingSlide) {
         response = await apiService.updateCarouselItem(editingSlide._id, slideData);
       } else {
-        const maxOrder = slides.length > 0 ? Math.max(...slides.map(s => s.order_position)) : 0;
-        response = await apiService.createCarouselItem({
-          ...slideData,
-          order_position: maxOrder + 1
-        });
+        response = await apiService.createCarouselItem(slideData);
       }
 
       if (!response.success) {
@@ -136,11 +139,11 @@ export function CarouselManagement() {
 
       fetchSlides();
       handleCloseDialog();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving slide:', error);
       toast({
         title: "Error",
-        description: "Failed to save slide",
+        description: error.message || "Failed to save slide",
         variant: "destructive"
       });
     } finally {
@@ -175,7 +178,7 @@ export function CarouselManagement() {
 
   const toggleSlideStatus = async (slideId: string, isActive: boolean) => {
     try {
-      const response = await apiService.updateCarouselItem(slideId, { is_active: isActive });
+      const response = await apiService.updateCarouselItem(slideId, { isActive: isActive });
       if (!response.success) {
         throw new Error(response.message || "Failed to update slide status");
       }
@@ -186,11 +189,11 @@ export function CarouselManagement() {
       });
       
       fetchSlides();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error toggling slide status:', error);
       toast({
         title: "Error",
-        description: "Failed to update slide status",
+        description: error.message || "Failed to update slide status",
         variant: "destructive"
       });
     }
@@ -200,12 +203,15 @@ export function CarouselManagement() {
     setEditingSlide(slide);
     setFormData({
       title: slide.title ?? "",
+      subtitle: slide.subtitle ?? "",
       image_url: slide.image_url,
+      imageFile: null,
       link_url: slide.link_url || "",
       product_id: slide.product_id || "",
       video_url: slide.video_url || "",
-      is_active: slide.is_active
+      isActive: slide.isActive !== undefined ? slide.isActive : (slide.is_active !== undefined ? slide.is_active : true)
     });
+    setImagePreview(slide.image_url);
     setIsDialogOpen(true);
   };
 
@@ -214,58 +220,29 @@ export function CarouselManagement() {
     setEditingSlide(null);
     setFormData({
       title: "",
+      subtitle: "",
       image_url: "",
+      imageFile: null,
       link_url: "",
       product_id: "",
       video_url: "",
-      is_active: true
+      isActive: true
     });
+    setImagePreview(null);
   };
 
-  const uploadToBucket = async (bucket: string, file: File): Promise<string> => {
-    try {
-      const response = await apiService.uploadCarouselMedia(file);
-      
-      if (!response.success || !response.data) {
-        throw new Error(response.message || "Failed to upload media");
-      }
-
-      return response.data.url || response.data.publicUrl;
-    } catch (error: any) {
-      console.error('Upload error:', error);
-      throw error;
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setFormData({ ...formData, imageFile: file });
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
-  const handleImageFile = async (files: FileList | null) => {
-    if (!files || !files[0]) return;
-    setUploadingImage(true);
-    try {
-      const url = await uploadToBucket('carousel-images', files[0]);
-      setFormData((f) => ({ ...f, image_url: url }));
-      toast({ title: 'Image uploaded', description: 'Image URL has been set.' });
-    } catch (e) {
-      console.error('Image upload failed', e);
-      toast({ title: 'Upload failed', description: 'Could not upload image.', variant: 'destructive' });
-    } finally {
-      setUploadingImage(false);
-    }
-  };
-
-  const handleVideoFile = async (files: FileList | null) => {
-    if (!files || !files[0]) return;
-    setUploadingVideo(true);
-    try {
-      const url = await uploadToBucket('carousel-videos', files[0]);
-      setFormData((f) => ({ ...f, video_url: url }));
-      toast({ title: 'Video uploaded', description: 'Video URL has been set.' });
-    } catch (e) {
-      console.error('Video upload failed', e);
-      toast({ title: 'Upload failed', description: 'Could not upload video.', variant: 'destructive' });
-    } finally {
-      setUploadingVideo(false);
-    }
-  };
 
   const moveSlide = async (slideId: string, direction: 'up' | 'down') => {
     const slideIndex = slides.findIndex(s => s._id === slideId);
@@ -279,19 +256,21 @@ export function CarouselManagement() {
 
     try {
       // Swap order_position values
-      await apiService.updateCarouselItem(slide1._id, { order_position: slide2.order_position });
-      await apiService.updateCarouselItem(slide2._id, { order_position: slide1.order_position });
+      const order1 = slide1.order_position || slide1.sortOrder || 0;
+      const order2 = slide2.order_position || slide2.sortOrder || 0;
+      await apiService.updateCarouselItem(slide1._id, { order_position: order2 });
+      await apiService.updateCarouselItem(slide2._id, { order_position: order1 });
 
       fetchSlides();
       toast({
         title: "Success",
         description: "Slide order updated"
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error moving slide:', error);
       toast({
         title: "Error",
-        description: "Failed to update slide order",
+        description: error.message || "Failed to update slide order",
         variant: "destructive"
       });
     }
@@ -313,9 +292,15 @@ export function CarouselManagement() {
           <p className="text-muted-foreground">Manage homepage carousel slides</p>
         </div>
         
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          setIsDialogOpen(open);
+          if (!open) handleCloseDialog();
+        }}>
           <DialogTrigger asChild>
-            <Button onClick={() => setIsDialogOpen(true)}>
+            <Button onClick={() => {
+              handleCloseDialog();
+              setIsDialogOpen(true);
+            }}>
               <Plus className="h-4 w-4 mr-2" />
               Add Slide
             </Button>
@@ -340,26 +325,74 @@ export function CarouselManagement() {
                   placeholder="Enter slide title"
                 />
               </div>
+
+              <div>
+                <Label htmlFor="subtitle">Subtitle (Optional)</Label>
+                <Input
+                  id="subtitle"
+                  value={formData.subtitle}
+                  onChange={(e) => setFormData({...formData, subtitle: e.target.value})}
+                  placeholder="Enter slide subtitle"
+                />
+              </div>
               
               <div>
-                <Label htmlFor="image_url">Image URL</Label>
-                <Input
-                  id="image_url"
-                  value={formData.image_url}
-                  onChange={(e) => setFormData({...formData, image_url: e.target.value})}
-                  placeholder="Enter image URL"
-                />
-                <div className="mt-2 flex items-center gap-2">
-                  <input
-                    id="image_upload"
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => handleImageFile(e.target.files)}
-                  />
-                  <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('image_upload')?.click()} disabled={uploadingImage}>
-                    {uploadingImage ? 'Uploading...' : 'Upload Image'}
-                  </Button>
+                <Label htmlFor="image">Image</Label>
+                <div className="space-y-2">
+                  {imagePreview && (
+                    <div className="relative w-full h-48 rounded-lg overflow-hidden border-2 border-muted">
+                      <img
+                        src={imagePreview}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        className="absolute top-2 right-2"
+                        onClick={() => {
+                          setImagePreview(null);
+                          setFormData({ ...formData, imageFile: null, image_url: '' });
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="image_upload"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleImageFileChange}
+                    />
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => document.getElementById('image_upload')?.click()}
+                    >
+                      <ImageIcon className="h-4 w-4 mr-2" />
+                      {formData.imageFile ? 'Change Image' : 'Upload Image'}
+                    </Button>
+                  </div>
+                  {!formData.imageFile && (
+                    <div className="mt-2">
+                      <Label htmlFor="image_url" className="text-sm text-muted-foreground">Or enter image URL</Label>
+                      <Input
+                        id="image_url"
+                        value={formData.image_url}
+                        onChange={(e) => {
+                          setFormData({...formData, image_url: e.target.value});
+                          if (e.target.value) setImagePreview(e.target.value);
+                        }}
+                        placeholder="Enter image URL"
+                        className="mt-1"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
               
@@ -371,29 +404,17 @@ export function CarouselManagement() {
                   onChange={(e) => setFormData({...formData, video_url: e.target.value})}
                   placeholder="https://.../your-video.mp4"
                 />
-                <div className="mt-2 flex items-center gap-2">
-                  <input
-                    id="video_upload"
-                    type="file"
-                    accept="video/*"
-                    className="hidden"
-                    onChange={(e) => handleVideoFile(e.target.files)}
-                  />
-                  <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('video_upload')?.click()} disabled={uploadingVideo}>
-                    {uploadingVideo ? 'Uploading...' : 'Upload Video'}
-                  </Button>
-                </div>
               </div>
               
-                <div>
-                  <Label htmlFor="link_url">Link (Optional)</Label>
-                  <Input
-                    id="link_url"
-                    value={formData.link_url}
-                    onChange={(e) => setFormData({...formData, link_url: e.target.value})}
-                    placeholder="Enter link URL"
-                  />
-                </div>
+              <div>
+                <Label htmlFor="link_url">Link (Optional)</Label>
+                <Input
+                  id="link_url"
+                  value={formData.link_url}
+                  onChange={(e) => setFormData({...formData, link_url: e.target.value})}
+                  placeholder="Enter link URL"
+                />
+              </div>
 
               <div>
                 <Label htmlFor="product_id">Target Product ID (Optional)</Label>
@@ -407,11 +428,11 @@ export function CarouselManagement() {
               
               <div className="flex items-center space-x-2">
                 <Switch
-                  id="is_active"
-                  checked={formData.is_active}
-                  onCheckedChange={(checked) => setFormData({...formData, is_active: checked})}
+                  id="isActive"
+                  checked={formData.isActive}
+                  onCheckedChange={(checked) => setFormData({...formData, isActive: checked})}
                 />
-                <Label htmlFor="is_active">Active</Label>
+                <Label htmlFor="isActive">Active</Label>
               </div>
             </div>
             
@@ -459,12 +480,16 @@ export function CarouselManagement() {
 
       {/* Slides List */}
       <div className="space-y-4">
-        {slides.map((slide, index) => (
-          <Card key={slide._id}>
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div className="flex items-center space-x-4">
-                  <div className="w-20 h-12 bg-muted rounded-lg overflow-hidden flex items-center justify-center">
+        {slides.map((slide, index) => {
+          const isActive = slide.isActive !== undefined ? slide.isActive : (slide.is_active !== undefined ? slide.is_active : true);
+          const orderPosition = slide.order_position || slide.sortOrder || index + 1;
+          
+          return (
+            <Card key={slide._id} className="shadow-soft hover:shadow-luxury transition-shadow overflow-hidden">
+              <div className="flex items-stretch">
+                {/* Left: Image */}
+                <div className="w-32 md:w-40 lg:w-48 flex-shrink-0">
+                  <div className="h-32 md:h-40 lg:h-48 bg-muted rounded-lg flex items-center justify-center overflow-hidden">
                     {slide.image_url ? (
                       <img 
                         src={slide.image_url} 
@@ -472,92 +497,113 @@ export function CarouselManagement() {
                         className="w-full h-full object-cover"
                         onError={(e) => {
                           e.currentTarget.style.display = 'none';
-                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                          const parent = e.currentTarget.parentElement;
+                          if (parent && !parent.querySelector('.fallback-icon')) {
+                            const icon = document.createElement('div');
+                            icon.className = 'fallback-icon flex items-center justify-center';
+                            icon.innerHTML = '<svg class="h-10 w-10 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>';
+                            parent.appendChild(icon);
+                          }
                         }}
                       />
-                    ) : null}
-                    <ImageIcon className="h-6 w-6 text-muted-foreground hidden" />
-                  </div>
-                      <div>
-                        {slide.title ? (
-                          <CardTitle className="text-lg">{slide.title}</CardTitle>
-                        ) : null}
-                        <CardDescription>
-                          Order: {slide.order_position} • Created: {new Date(slide.createdAt).toLocaleDateString()}
-                        </CardDescription>
-                      </div>
-                </div>
-                
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => toggleSlideStatus(slide._id, !slide.is_active)}
-                  >
-                    {slide.is_active ? (
-                      <Eye className="h-4 w-4 text-green-600" />
                     ) : (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      <ImageIcon className="h-10 w-10 text-muted-foreground" />
                     )}
-                  </Button>
-                  
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => moveSlide(slide._id, 'up')}
-                    disabled={index === 0}
-                  >
-                    ↑
-                  </Button>
-                  
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => moveSlide(slide._id, 'down')}
-                    disabled={index === slides.length - 1}
-                  >
-                    ↓
-                  </Button>
-                  
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleEdit(slide)}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDelete(slide._id)}
-                    className="text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  </div>
+                </div>
+
+                {/* Center: Details */}
+                <div className="flex-1 min-w-0 pl-4 flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      {slide.title && (
+                        <h3 className="font-semibold text-lg truncate">{slide.title}</h3>
+                      )}
+                      {isActive ? (
+                        <Badge variant="default" className="bg-green-500">
+                          <Eye className="h-3 w-3 mr-1" />
+                          Active
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">
+                          <EyeOff className="h-3 w-3 mr-1" />
+                          Inactive
+                        </Badge>
+                      )}
+                    </div>
+                    {slide.subtitle && (
+                      <p className="text-sm text-muted-foreground mb-2">{slide.subtitle}</p>
+                    )}
+                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                      <span>Order: <span className="font-medium">{orderPosition}</span></span>
+                      {slide.link_url && (
+                        <span className="truncate max-w-[200px]" title={slide.link_url}>
+                          Link: <span className="font-mono">{slide.link_url}</span>
+                        </span>
+                      )}
+                      <span>Created: {new Date(slide.createdAt).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+
+                  {/* Right: Actions */}
+                  <div className="flex items-center space-x-2 flex-shrink-0 ml-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => toggleSlideStatus(slide._id, !isActive)}
+                      title={isActive ? "Deactivate" : "Activate"}
+                    >
+                      {isActive ? (
+                        <Eye className="h-4 w-4" />
+                      ) : (
+                        <EyeOff className="h-4 w-4" />
+                      )}
+                    </Button>
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => moveSlide(slide._id, 'up')}
+                      disabled={index === 0}
+                      title="Move up"
+                    >
+                      <ArrowUp className="h-4 w-4" />
+                    </Button>
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => moveSlide(slide._id, 'down')}
+                      disabled={index === slides.length - 1}
+                      title="Move down"
+                    >
+                      <ArrowDown className="h-4 w-4" />
+                    </Button>
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEdit(slide)}
+                      title="Edit slide"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDelete(slide._id)}
+                      className="text-destructive hover:text-destructive"
+                      title="Delete slide"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </CardHeader>
-            
-            {(slide.link_url || !slide.is_active) && (
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  {slide.link_url && (
-                    <div>
-                      <p className="text-sm font-medium">Link:</p>
-                      <p className="text-sm text-muted-foreground truncate max-w-md">{slide.link_url}</p>
-                    </div>
-                  )}
-                  {!slide.is_active && (
-                    <div className="bg-muted px-2 py-1 rounded text-sm">
-                      Inactive
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            )}
-          </Card>
-        ))}
+            </Card>
+          );
+        })}
       </div>
 
       {slides.length === 0 && (

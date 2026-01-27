@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Package, Plus, Edit2, Trash2, Star, StarOff, X, Upload, Loader2, MessageSquarePlus, Download } from "lucide-react";
+import { Package, Plus, Edit2, Trash2, Star, StarOff, X, Upload, Loader2, MessageSquarePlus, Download, ImageIcon } from "lucide-react";
 import { apiService } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 import ProductVariantsManagement from "./ProductVariantsManagement";
@@ -19,21 +19,44 @@ import * as XLSX from "xlsx";
 interface Product {
   _id: string;
   name: string;
+  slug?: string;
   description: string;
   price: number;
   stock: number;
-  is_featured: boolean;
-  image_url: string;
-  image_urls: string[];
-  discount: number | null;
+  isFeatured?: boolean;
+  is_featured?: boolean;
+  isActive?: boolean;
+  isBestSeller?: boolean;
+  isNew?: boolean;
+  images?: string[] | Array<{ url?: string; _id?: string }>;
+  image_url?: string;
+  image_urls?: string[];
+  category?: {
+    _id: string;
+    name: string;
+    slug?: string;
+  } | string;
+  variants?: Array<{
+    _id?: string;
+    name: string;
+    price: number;
+    stock: number;
+  }>;
+  tags?: string[];
+  ingredients?: string[];
+  allergens?: string[];
+  metaKeywords?: string[];
+  sortOrder?: number;
+  views?: number;
+  sales?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  // Legacy fields for backward compatibility
+  discount?: number | null;
   discount_amount?: number | null;
   discount_type?: "percentage" | "amount" | null;
-  category: string;
   selling_points?: string[] | null;
   shipping_information?: string | null;
-  tags?: string[] | null;
-  createdAt: string;
-  updatedAt: string;
 }
 
 interface ProductVariant {
@@ -110,11 +133,11 @@ export const ProductsManagement = () => {
   const normalizedSearch = searchTerm.trim().toLowerCase();
   const filteredProducts = normalizedSearch
     ? products.filter((product) => {
-        const categoryName = product.categories?.name ?? "";
+        const categoryName = typeof product.category === 'object' ? product.category?.name ?? "" : "";
         return (
-          product.title.toLowerCase().includes(normalizedSearch) ||
+          product.name.toLowerCase().includes(normalizedSearch) ||
           categoryName.toLowerCase().includes(normalizedSearch) ||
-          product.id.toLowerCase().includes(normalizedSearch)
+          product._id.toLowerCase().includes(normalizedSearch)
         );
       })
     : products;
@@ -139,33 +162,12 @@ export const ProductsManagement = () => {
         throw new Error(response.message || "Failed to fetch products");
       }
 
-      // Handle different possible data structures
-      const productsData = response.data.products || response.data.data || response.data;
+      // Handle nested data structure: response.data.data contains the array
+      const productsData = response.data.data?.data || response.data.data || response.data.products || response.data;
       const products = Array.isArray(productsData) ? productsData : [];
       
-      // Transform products to match expected structure
-      const transformedProducts = products.map((product: any) => ({
-        _id: product._id || product.id,
-        name: product.name || product.title,
-        title: product.title || product.name,
-        description: product.description || '',
-        price: product.price || 0,
-        stock: product.stock || product.stock_quantity || 0,
-        is_featured: product.is_featured || false,
-        image_url: product.image_url || product.images?.[0]?.url || '',
-        image_urls: product.image_urls || product.images?.map((img: any) => img.url || img) || [],
-        discount: product.discount || null,
-        discount_amount: product.discount_amount || null,
-        discount_type: product.discount_type || null,
-        category: product.category?._id || product.category || product.category_id || '',
-        selling_points: product.selling_points || null,
-        shipping_information: product.shipping_information || null,
-        tags: product.tags || null,
-        createdAt: product.createdAt || product.created_at || '',
-        updatedAt: product.updatedAt || product.updated_at || ''
-      }));
-      
-      setProducts(transformedProducts);
+      // Use products directly from API (they already match the new structure)
+      setProducts(products);
 
       // Check if discount type is supported (assuming it is for now)
       setSupportsDiscountType(true);
@@ -185,10 +187,14 @@ export const ProductsManagement = () => {
     try {
       const response = await apiService.getAllCategories();
       if (response.success && response.data) {
-        setCategories(response.data);
+        // Handle nested data structure: response.data.data contains the array
+        const categoriesData = response.data.data?.data || response.data.data || response.data.categories || response.data;
+        const categories = Array.isArray(categoriesData) ? categoriesData : [];
+        setCategories(categories);
       }
     } catch (error) {
       console.error('Error fetching categories:', error);
+      setCategories([]); // Set empty array on error to prevent map errors
     }
   };
 
@@ -249,13 +255,14 @@ export const ProductsManagement = () => {
         category: formData.category_id.trim(),
         image_url: imageUrls[0] || formData.image_url,
         image_urls: imageUrls.length > 0 ? imageUrls : [formData.image_url].filter(Boolean),
-        is_featured: formData.is_featured,
-        selling_points: parsedSellingPoints.length ? parsedSellingPoints : null,
-        shipping_information: formData.shipping_information.trim() || null,
+        is_featured: formData.is_featured !== undefined ? formData.is_featured : false,
+        selling_points: parsedSellingPoints.length > 0 ? parsedSellingPoints : undefined,
+        shipping_information: formData.shipping_information.trim() || undefined,
       };
 
+      // Always include discount fields to match API structure
       if (supportsDiscountType) {
-        productData.discount_type = selectedDiscountType;
+        productData.discount_type = selectedDiscountType || 'percentage';
         if (selectedDiscountType === "percentage") {
           productData.discount = normalizedPercent;
           productData.discount_amount = 0;
@@ -264,7 +271,10 @@ export const ProductsManagement = () => {
           productData.discount_amount = normalizedAmount;
         }
       } else {
+        // Default values to match curl command
         productData.discount = normalizedPercent;
+        productData.discount_type = 'percentage';
+        productData.discount_amount = 0;
       }
 
       let productId;
@@ -327,7 +337,8 @@ export const ProductsManagement = () => {
 
   const toggleFeatured = async (product: Product) => {
     try {
-      const response = await apiService.toggleFeaturedProducts(product._id, !product.is_featured);
+      const isFeatured = product.isFeatured || product.is_featured || false;
+      const response = await apiService.toggleFeaturedProducts(product._id, !isFeatured);
 
       if (!response.success) {
         throw new Error(response.message || "Failed to update product");
@@ -335,7 +346,7 @@ export const ProductsManagement = () => {
 
       toast({
         title: "Success",
-        description: `Product ${!product.is_featured ? 'featured' : 'unfeatured'} successfully`
+        description: `Product ${!isFeatured ? 'featured' : 'unfeatured'} successfully`
       });
 
       fetchProducts();
@@ -381,39 +392,64 @@ export const ProductsManagement = () => {
       supportsDiscountType && (product.discount_type === "amount" || (!product.discount_type && (Number(product.discount_amount) || 0) > 0))
         ? "amount"
         : "percentage";
+    
+    // Get category ID from category object or string
+    const categoryId = typeof product.category === 'object' ? product.category?._id : (product.category || '');
+    
+    // Get images from images array or image_url/image_urls
+    const getImages = () => {
+      if (product.images && product.images.length > 0) {
+        return product.images.map((img: any) => typeof img === 'string' ? img : img?.url || '').filter(Boolean);
+      }
+      return product.image_urls || (product.image_url ? [product.image_url] : []);
+    };
+    
     setFormData({
-      title: product.title,
+      title: product.name || product.title || "",
       description: product.description || "",
-      stock_quantity: product.stock_quantity?.toString() || "0",
-      category_id: product.category_id || "",
-      image_url: product.image_url || "",
+      stock_quantity: (product.stock || product.stock_quantity || 0).toString(),
+      category_id: categoryId,
+      image_url: getImages()[0] || "",
       discountPercent: product.discount?.toString() || "0",
       discountAmount: supportsDiscountType && derivedType === "amount" ? (product.discount_amount?.toString() || "0") : "",
       discountType: derivedType,
-      is_featured: product.is_featured,
+      is_featured: product.isFeatured || product.is_featured || false,
       selling_points: (product.selling_points || []).join('\n'),
       shipping_information: product.shipping_information || "",
     });
     
-    // Load existing images and variants
-    setImageUrls(product.image_urls || [product.image_url].filter(Boolean));
+    // Load existing images
+    setImageUrls(getImages());
     
-    // Fetch existing variants
-    try {
-      const response = await apiService.getProductVariants(product._id);
-      
-      if (response.success && response.data) {
-        // Map backend variant structure to frontend structure
-        const mappedVariants = response.data.map((v: any) => ({
-          _id: v._id,
-          size: v.name || v.size,
-          price: v.price,
-          stock_quantity: v.stock || v.stock_quantity
-        }));
-        setVariants(mappedVariants);
+    // Use variants from product if available, otherwise fetch
+    if (product.variants && product.variants.length > 0) {
+      // Map variants from product object
+      const mappedVariants = product.variants.map((v: any) => ({
+        _id: v._id,
+        size: v.name || v.size,
+        price: v.price,
+        stock_quantity: v.stock || v.stock_quantity || 0
+      }));
+      setVariants(mappedVariants);
+    } else {
+      // Fetch existing variants if not in product object
+      try {
+        const response = await apiService.getProductVariants(product._id);
+        
+        if (response.success && response.data) {
+          // Map backend variant structure to frontend structure
+          const mappedVariants = response.data.map((v: any) => ({
+            _id: v._id,
+            size: v.name || v.size,
+            price: v.price,
+            stock_quantity: v.stock || v.stock_quantity || 0
+          }));
+          setVariants(mappedVariants);
+        }
+      } catch (error) {
+        console.error('Error loading variants:', error);
+        setVariants([]);
       }
-    } catch (error) {
-      console.error('Error loading variants:', error);
     }
     
     setDialogOpen(true);
@@ -556,21 +592,28 @@ export const ProductsManagement = () => {
       return;
     }
 
-    const worksheetData = products.map((product) => ({
-      ID: product.id,
-      Title: product.title,
-      Category: product.categories?.name ?? "",
-      Price: Math.round(Number(product.price ?? 0)),
-      "Discount Type": product.discount_type ?? "percentage",
-      "Discount %": product.discount ?? 0,
-      "Discount Amount": product.discount_amount ?? 0,
-      Stock: product.stock_quantity ?? 0,
-      Featured: product.is_featured ? "Yes" : "No",
-      "Primary Image": product.image_url ?? "",
-      "Image URLs": (product.image_urls || []).join(", "),
+    const worksheetData = products.map((product) => {
+      const categoryName = typeof product.category === 'object' ? product.category?.name ?? "" : "";
+      const images = product.images?.map((img: any) => typeof img === 'string' ? img : img?.url || '').filter(Boolean) || product.image_urls || [];
+      const primaryImage = images[0] || product.image_url || '';
+      
+      return {
+        ID: product._id,
+        Title: product.name,
+        Category: categoryName,
+        Price: Math.round(Number(product.price ?? 0)),
+        "Discount Type": product.discount_type ?? "percentage",
+        "Discount %": product.discount ?? 0,
+        "Discount Amount": product.discount_amount ?? 0,
+        Stock: product.stock ?? 0,
+        Featured: (product.isFeatured || product.is_featured) ? "Yes" : "No",
+        "Primary Image": primaryImage,
+        "Image URLs": images.join(", "),
       "Selling Points": (product.selling_points || []).join(" | "),
       "Shipping Information": product.shipping_information ?? "",
-    }));
+      "Variants": product.variants?.length ?? 0,
+    };
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(worksheetData);
     const workbook = XLSX.utils.book_new();
@@ -687,7 +730,7 @@ export const ProductsManagement = () => {
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="amount" id="discount-amount" disabled={!supportsDiscountType} />
                       <Label htmlFor="discount-amount" className="font-normal">
-                        Fixed Amount (Rs)
+                        Fixed Amount (£)
                       </Label>
                     </div>
                   </RadioGroup>
@@ -825,7 +868,7 @@ export const ProductsManagement = () => {
                     id="shipping_information"
                     value={formData.shipping_information}
                     onChange={(e) => setFormData({ ...formData, shipping_information: e.target.value })}
-                    placeholder="Delivery within 2-3 business days. Free shipping on orders above Rs. 2500."
+                    placeholder="Delivery within 2-3 business days. Free shipping on orders above £2500."
                     rows={4}
                   />
                   <p className="text-xs text-muted-foreground">Optional additional shipping notes shown in the product accordion.</p>
@@ -950,73 +993,145 @@ export const ProductsManagement = () => {
             </CardContent>
           </Card>
         ) : (
-          filteredProducts.map((product) => (
-            <Card key={product.id} className="shadow-soft">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    {product.image_url && (
-                      <img
-                        src={product.image_url}
-                        alt={product.title}
-                        className="w-16 h-16 object-cover rounded-lg"
-                      />
-                    )}
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <h3 className="font-semibold">{product.title}</h3>
-                        {product.is_featured && (
-                          <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
-                            <Star className="h-3 w-3 mr-1" />
-                            Featured
-                          </Badge>
+          filteredProducts.map((product) => {
+            // Get the first image from images array or use image_url
+            const getProductImage = () => {
+              if (product.images && product.images.length > 0) {
+                const firstImage = product.images[0];
+                return typeof firstImage === 'string' ? firstImage : firstImage?.url || '';
+              }
+              return product.image_url || product.image_urls?.[0] || '';
+            };
+            
+            const productImage = getProductImage();
+            const categoryName = typeof product.category === 'object' ? product.category?.name : '';
+            const isFeatured = product.isFeatured || product.is_featured || false;
+            const productStock = product.stock || 0;
+            const variantsCount = product.variants?.length || 0;
+            
+            return (
+              <Card key={product._id} className="shadow-soft hover:shadow-luxury transition-shadow overflow-hidden">
+                <CardContent className="p-4">
+                  <div className="flex items-stretch justify-between">
+                    {/* Left: Image block, similar to category card */}
+                    <div className="w-28 md:w-32 lg:w-40 flex-shrink-0">
+                      <div className="h-24 md:h-28 lg:h-32 bg-muted rounded-lg flex items-center justify-center overflow-hidden">
+                        {productImage ? (
+                          <img
+                            src={productImage}
+                            alt={product.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              // Fallback to default icon on error
+                              const target = e.currentTarget;
+                              target.style.display = 'none';
+                              const parent = target.parentElement;
+                              if (parent) {
+                                const icon = document.createElement('div');
+                                icon.className = 'flex items-center justify-center';
+                                icon.innerHTML = '<svg class="h-10 w-10 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10a2 2 0 002 2h12a2 2 0 002-2V9a2 2 0 00-2-2h-5.5L11 5H6a2 2 0 00-2 2z" /></svg>';
+                                parent.appendChild(icon);
+                              }
+                            }}
+                          />
+                        ) : (
+                          <Package className="h-10 w-10 text-muted-foreground" />
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground select-all">ID: {product.id}</p>
-                      <p className="text-sm text-muted-foreground">{product.categories?.name}</p>
-                      <p className="text-sm font-medium">Rs {Number(product.price ?? 0).toFixed(2)}</p>
-                      <p className="text-xs text-muted-foreground">Stock: {product.stock_quantity}</p>
+                    </div>
+
+                    {/* Right: Details */}
+                    <div className="flex-1 min-w-0 pl-4 flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center flex-wrap gap-2 mb-1">
+                          <h3 className="font-semibold truncate">{product.name}</h3>
+                          {isFeatured && (
+                            <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
+                              <Star className="h-3 w-3 mr-1" />
+                              Featured
+                            </Badge>
+                          )}
+                          {product.isBestSeller && (
+                            <Badge variant="default" className="bg-orange-500">
+                              Best Seller
+                            </Badge>
+                          )}
+                          {product.isNew && (
+                            <Badge variant="default" className="bg-blue-500">
+                              New
+                            </Badge>
+                          )}
+                        </div>
+
+                        <p className="text-xs text-muted-foreground select-all mb-1">
+                          ID: {product._id}
+                        </p>
+
+                        {/* Tag row: category, price, variants, stock */}
+                        <div className="flex flex-wrap gap-2 mb-2 text-xs">
+                          {categoryName && (
+                            <Badge variant="outline" className="text-xs">
+                              Category: {categoryName}
+                            </Badge>
+                          )}
+                          <Badge variant="outline" className="text-xs">
+                            Price: £{Number(product.price ?? 0).toFixed(2)}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            Stock: {productStock}
+                          </Badge>
+                          {variantsCount > 0 && (
+                            <Badge variant="outline" className="text-xs">
+                              {variantsCount} variant{variantsCount !== 1 ? 's' : ''}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-2 flex-shrink-0 ml-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openReviewDialog(product)}
+                          title="Add Review"
+                        >
+                          <MessageSquarePlus className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => toggleFeatured(product)}
+                          title={isFeatured ? "Remove from Featured" : "Mark as Featured"}
+                        >
+                          {isFeatured ? (
+                            <StarOff className="h-4 w-4" />
+                          ) : (
+                            <Star className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openEditDialog(product)}
+                          title="Edit Product"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => deleteProduct(product._id)}
+                          title="Delete Product"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
-
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openReviewDialog(product)}
-                    >
-                      <MessageSquarePlus className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => toggleFeatured(product)}
-                    >
-                      {product.is_featured ? (
-                        <StarOff className="h-4 w-4" />
-                      ) : (
-                        <Star className="h-4 w-4" />
-                      )}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openEditDialog(product)}
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => deleteProduct(product.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
+                </CardContent>
+              </Card>
+            );
+          })
         )}
       </div>
     </div>

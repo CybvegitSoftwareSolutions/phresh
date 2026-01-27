@@ -1,7 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Link } from "react-router-dom";
 import { useState } from "react";
@@ -16,43 +15,42 @@ const purposesList = [
   "Employee / Corporate Gifting",
   "Family Event",
   "Re-selling",
+  "Other",
 ];
 
 const CorporateOrder = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [org, setOrg] = useState("");
-  const [purposes, setPurposes] = useState<string[]>([]);
+  const [purpose, setPurpose] = useState("");
   const [otherPurpose, setOtherPurpose] = useState("");
   const [address, setAddress] = useState("");
-  const [scentsRequired, setScentsRequired] = useState("10-100");
+  const [numberOfPeople, setNumberOfPeople] = useState<number>(10);
   const [loading, setLoading] = useState(false);
   const [authSheetOpen, setAuthSheetOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const { user } = useAuth();
 
-  const togglePurpose = (p: string, checked: boolean) => {
-    setPurposes((prev) => (checked ? [...new Set([...prev, p])] : prev.filter((x) => x !== p)));
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email || !phone || !org || (!purposes.length && !otherPurpose) || !scentsRequired) {
+    if (!name || !email || !phone || !purpose || !numberOfPeople) {
       toast({ title: "Missing info", description: "Please fill all required fields.", variant: "destructive" });
+      return;
+    }
+    if (purpose === "Other" && !otherPurpose) {
+      toast({ title: "Missing info", description: "Please specify the purpose.", variant: "destructive" });
       return;
     }
     setLoading(true);
     try {
+      const finalPurpose = purpose === "Other" ? otherPurpose : purpose;
       const body = {
         name,
         email,
         phone,
-        organization_name: org,
-        purposes,
-        other_purpose: otherPurpose || null,
-        address: address || null,
-        scents_required: scentsRequired,
+        purpose: finalPurpose,
+        address: address || "",
+        number_of_people: numberOfPeople,
       };
       
       const response = await apiService.submitCorporateOrder(body);
@@ -61,7 +59,13 @@ const CorporateOrder = () => {
       }
       
       toast({ title: "Thanks!", description: "We received your request and will get back to you shortly." });
-      setName(""); setEmail(""); setPhone(""); setOrg(""); setPurposes([]); setOtherPurpose(""); setAddress(""); setScentsRequired("10-100");
+      setName(""); 
+      setEmail(""); 
+      setPhone(""); 
+      setPurpose(""); 
+      setOtherPurpose(""); 
+      setAddress(""); 
+      setNumberOfPeople(10);
     } catch (e: any) {
       toast({ title: "Failed to submit", description: e.message || 'Please try again', variant: "destructive" });
     } finally {
@@ -71,11 +75,11 @@ const CorporateOrder = () => {
 
   return (
     <div className="min-h-screen">
-      {/* Header Section with bg.png background */}
+      {/* Header Section with bg-green.png background */}
       <div
         className="relative w-full"
         style={{
-          backgroundImage: 'url(/bg.png)',
+          backgroundImage: 'url(/bg-green.png)',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat'
@@ -126,6 +130,18 @@ const CorporateOrder = () => {
                 />
             </div>
             <div>
+                <label className="text-sm font-medium text-gray-900 block mb-2">Number of People *</label>
+                <Input 
+                  type="number" 
+                  min="1"
+                  value={numberOfPeople} 
+                  onChange={(e) => setNumberOfPeople(parseInt(e.target.value) || 1)} 
+                  required 
+                  className="bg-white border-gray-300 text-gray-900"
+                  placeholder="Enter number of people"
+                />
+            </div>
+            <div>
                 <label className="text-sm font-medium text-gray-900 block mb-2">Phone number *</label>
                 <Input 
                   value={phone} 
@@ -134,49 +150,29 @@ const CorporateOrder = () => {
                   className="bg-white border-gray-300 text-gray-900"
                 />
             </div>
-            <div>
-                <label className="text-sm font-medium text-gray-900 block mb-2">Organization Name *</label>
-                <Input 
-                  value={org} 
-                  onChange={(e) => setOrg(e.target.value)} 
-                  required 
-                  className="bg-white border-gray-300 text-gray-900"
-                />
-            </div>
           </div>
 
           <div>
               <label className="text-sm font-medium text-gray-900 block mb-2">Purpose *</label>
-            <div className="space-y-2">
+            <RadioGroup value={purpose} onValueChange={setPurpose} className="space-y-2">
               {purposesList.map((p) => (
                 <div key={p} className="flex items-center space-x-2">
-                    <Checkbox 
-                      id={p} 
-                      checked={purposes.includes(p)} 
-                      onCheckedChange={(c) => togglePurpose(p, !!c)}
-                      className="border-gray-300 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                    />
-                    <label htmlFor={p} className="text-sm text-gray-900 cursor-pointer">{p}</label>
+                  <RadioGroupItem value={p} id={`purpose-${p}`} className="border-gray-300" />
+                  <label htmlFor={`purpose-${p}`} className="text-sm text-gray-900 cursor-pointer">{p}</label>
                 </div>
               ))}
-              <div className="grid grid-cols-5 gap-2 items-center">
-                <div className="col-span-1 flex items-center space-x-2">
-                    <Checkbox 
-                      id="other" 
-                      checked={!!otherPurpose} 
-                      onCheckedChange={(c) => !c && setOtherPurpose("")}
-                      className="border-gray-300 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                    />
-                    <label htmlFor="other" className="text-sm text-gray-900 cursor-pointer">Other:</label>
-                </div>
+              {purpose === "Other" && (
+                <div className="ml-6 mt-2">
                   <Input 
-                    className="col-span-4 bg-white border-gray-300 text-gray-900" 
+                    className="bg-white border-gray-300 text-gray-900" 
                     value={otherPurpose} 
                     onChange={(e) => setOtherPurpose(e.target.value)} 
-                    placeholder="Specify" 
+                    placeholder="Specify purpose" 
+                    required
                   />
-              </div>
-            </div>
+                </div>
+              )}
+            </RadioGroup>
           </div>
 
           <div>
@@ -187,24 +183,6 @@ const CorporateOrder = () => {
                 onChange={(e) => setAddress(e.target.value)} 
                 className="bg-white border-gray-300 text-gray-900"
               />
-          </div>
-
-          <div>
-              <label className="text-sm font-medium text-gray-900 block mb-2">Number of Items Required *</label>
-            <RadioGroup value={scentsRequired} onValueChange={setScentsRequired} className="space-y-2">
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="10-100" id="r1" className="border-gray-300" />
-                  <label htmlFor="r1" className="text-sm text-gray-900 cursor-pointer">10-100</label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="100-200" id="r2" className="border-gray-300" />
-                  <label htmlFor="r2" className="text-sm text-gray-900 cursor-pointer">100-200</label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="200+" id="r3" className="border-gray-300" />
-                  <label htmlFor="r3" className="text-sm text-gray-900 cursor-pointer">200 & above</label>
-                </div>
-            </RadioGroup>
           </div>
 
             <div className="flex justify-center pt-4">
@@ -220,7 +198,7 @@ const CorporateOrder = () => {
         </div>
       </section>
 
-      {/* Footer with bg.png background */}
+      {/* Footer with bg-green.png background */}
       <Footer />
 
       {/* Auth Sheet */}

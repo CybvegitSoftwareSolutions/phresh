@@ -68,13 +68,26 @@ export const HomePage = () => {
   const [newsletterLoading, setNewsletterLoading] = useState(false);
   const [authSheetOpen, setAuthSheetOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
-  const { addToCart, items, updateQuantity } = useCart();
+  const { addToCart, items, updateQuantity, removeFromCart } = useCart();
   const { user } = useAuth();
   const location = useLocation();
 
   useEffect(() => {
     loadData();
   }, [selectedCategoryId, sortBy]);
+
+  // Scroll to top on mount and when location changes
+  useEffect(() => {
+    // Scroll to top immediately
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    
+    // Also scroll after a small delay to ensure it works
+    const timer = setTimeout(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [location.pathname]);
 
   const loadData = async () => {
     try {
@@ -244,7 +257,12 @@ export const HomePage = () => {
   const handleDecrement = async (productId: string) => {
     const cartItem = getCartItem(productId);
     if (cartItem) {
-      await updateQuantity(cartItem._id, cartItem.quantity - 1);
+      if (cartItem.quantity > 1) {
+        await updateQuantity(cartItem._id, cartItem.quantity - 1);
+      } else {
+        // Remove from cart when quantity is 1
+        await removeFromCart(cartItem._id);
+      }
     }
   };
 
@@ -292,47 +310,73 @@ export const HomePage = () => {
 
   return (
     <div className="min-h-screen">
-      {/* Header and Hero Section with unified bg.png background */}
-      <div
-        className="relative w-full"
+      {/* Header */}
+      <Header />
+      
+      {/* Hero Section - with dark green background */}
+      <section 
+        className="relative py-8 md:py-12"
         style={{
-          backgroundImage: 'url(/bg.png)',
+          backgroundImage: 'url(/bg-green.png)',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat'
         }}
       >
-        <Header />
-        {/* Hero Section - Continuation of the same background */}
-        <section className="relative min-h-[600px] md:min-h-[700px] lg:min-h-[800px] pt-2 pb-16">
-          <div className="container mx-auto px-4 md:px-8">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
-              {/* Left Side - Hero Text */}
-              <div className="text-white space-y-6 z-10">
-                <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight">
-                  Fuel Your Day the Phresh Way
-                </h1>
-                <p className="text-lg md:text-xl text-white/90 leading-relaxed">
-                  Cold-pressed juices. Wellness boosters. Cleanses & community vibes.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                  <Link to="/products">
-                    <Button size="lg" className="bg-green-800 text-white hover:bg-green-900 font-semibold w-full sm:w-auto">
-                      Order Now
-                    </Button>
-                  </Link>
-                </div>
+        <div className="container mx-auto px-4 md:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+            {/* Left Side - Hero Text */}
+            <div className="text-white space-y-6 z-10">
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight">
+                Fuel Your Day the Phresh Way
+              </h1>
+              <p className="text-lg md:text-xl text-white/90 leading-relaxed">
+                Cold-pressed juices. Wellness boosters. Cleanses & community vibes.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                <Link to="/products">
+                  <Button size="lg" className="bg-green-800 text-white hover:bg-green-900 font-semibold w-full sm:w-auto">
+                    Order Now
+                  </Button>
+                </Link>
               </div>
+            </div>
 
-              {/* Right Side - Hero Image */}
-              <div className="relative z-10">
-                <div className="relative h-96 md:h-[500px] lg:h-[600px] rounded-lg overflow-hidden shadow-2xl">
-                  {carouselItems.length > 0 && carouselItems[0]?.image_url ? (
-                    <img
-                      src={carouselItems[0].image_url}
-                      alt={carouselItems[0].title || "Phresh Juice"}
-                      className="w-full h-full object-cover"
-                    />
+            {/* Right Side - Hero Carousel */}
+            <div className="relative z-10">
+              <div className="relative h-80 md:h-96 lg:h-[500px] rounded-lg overflow-hidden">
+                  {carouselItems.length > 0 ? (
+                    <Carousel
+                      opts={{
+                        align: "start",
+                        loop: true,
+                      }}
+                      autoPlay={carouselAutoplay}
+                      autoPlayInterval={carouselDelayMs}
+                      className="w-full h-full"
+                    >
+                      <CarouselContent className="h-full">
+                        {carouselItems.map((item) => (
+                          <CarouselItem key={item.id} className="h-full">
+                            <div className="relative w-full h-full">
+                              {item.image_url ? (
+                                <img
+                                  src={item.image_url}
+                                  alt={item.title || "Phresh Juice"}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <img
+                                  src="/placeholder.svg"
+                                  alt="Phresh Juice"
+                                  className="w-full h-full object-cover bg-white/10"
+                                />
+                              )}
+                            </div>
+                          </CarouselItem>
+                        ))}
+                      </CarouselContent>
+                    </Carousel>
                   ) : featuredProducts.length > 0 && featuredProducts[0]?.image_url ? (
                     <img
                       src={featuredProducts[0].image_url}
@@ -356,8 +400,7 @@ export const HomePage = () => {
               </div>
             </div>
           </div>
-        </section>
-      </div>
+      </section>
 
       {/* About Phresh Section - with bgWhite.png background */}
       <section 
@@ -410,11 +453,11 @@ export const HomePage = () => {
         </div>
       </section>
 
-      {/* Best Sellers Section - with bg.png background */}
+      {/* Best Sellers Section - with bg-green.png background */}
       <section 
-        className="py-16 md:py-24 relative"
+        className="py-16 md:py-24 relative mt-8"
         style={{
-          backgroundImage: 'url(/bg.png)',
+          backgroundImage: 'url(/bg-green.png)',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat'
@@ -430,20 +473,22 @@ export const HomePage = () => {
                 const tagline = product.category?.name || product.description?.split('.')[0] || "Fresh & Healthy";
 
                 return (
-                  <div key={product.id} className="flex flex-col items-center text-center space-y-4">
-                    {/* Product Image */}
-                    <div className="relative w-full h-80 md:h-96 overflow-hidden rounded-lg">
+                  <div key={product.id} className="flex flex-col items-center text-center space-y-4 w-full max-w-full">
+                    {/* Product Image - Clickable */}
+                    <Link to={`/products/${product.id}`} className="relative w-full h-80 md:h-96 overflow-hidden rounded-lg cursor-pointer hover:opacity-90 transition-opacity">
                         <img
                           src={primaryImage}
                           alt={product.title}
                         className="w-full h-full object-cover"
                       />
-                      </div>
+                      </Link>
 
                     {/* Product Info */}
-                    <div className="space-y-2 w-full">
-                      <h3 className="text-xl md:text-2xl font-bold text-white">{product.title}</h3>
-                      <p className="text-sm md:text-base text-white/80">{tagline}</p>
+                    <div className="space-y-2 w-full px-2">
+                      <Link to={`/products/${product.id}`} className="block hover:text-green-200 transition-colors">
+                        <h3 className="text-xl md:text-2xl font-bold text-white line-clamp-2">{product.title}</h3>
+                      </Link>
+                      <p className="text-sm md:text-base text-white/80 line-clamp-2">{tagline}</p>
                       {(() => {
                         const cartItem = getCartItem(product.id);
                         if (cartItem && cartItem.quantity > 0) {
@@ -452,7 +497,10 @@ export const HomePage = () => {
                               <Button
                                 size="icon"
                                 className="bg-green-800 text-white hover:bg-green-900 h-10 w-10 rounded-full"
-                                onClick={() => handleDecrement(product.id)}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleDecrement(product.id);
+                                }}
                               >
                                 -
                               </Button>
@@ -462,7 +510,10 @@ export const HomePage = () => {
                               <Button
                                 size="icon"
                                 className="bg-green-800 text-white hover:bg-green-900 h-10 w-10 rounded-full"
-                                onClick={() => handleIncrement(product.id)}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleIncrement(product.id);
+                                }}
                               >
                                 +
                               </Button>
@@ -472,7 +523,10 @@ export const HomePage = () => {
                         return (
                         <Button
                             className="w-full mt-4 bg-green-800 text-white hover:bg-green-900 font-semibold"
-                            onClick={() => handleAddToCart(product.id)}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleAddToCart(product.id);
+                            }}
                           >
                             ORDER NOW
                         </Button>
@@ -491,7 +545,7 @@ export const HomePage = () => {
         </div>
       </section>
 
-      {/* Why Phresh Works Section - with bgWhite.png background */}
+      {/* Why Choose Phresh Section - with bgWhite.png background */}
       <section 
         className="py-16 md:py-24 relative"
         style={{
@@ -501,46 +555,72 @@ export const HomePage = () => {
           backgroundRepeat: 'no-repeat'
         }}
       >
-        <div className="container mx-auto px-4">
-          <h2 className="text-3xl md:text-4xl font-bold text-center mb-12 text-gray-900">Why Phresh Works</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
-            <div className="text-center">
-              <div className="bg-primary/20 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
-                <Droplet className="h-10 w-10 text-primary" />
+        <div className="container mx-auto px-4 md:px-8">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-3xl md:text-4xl font-bold text-center mb-4 text-gray-900">Why Choose Phresh?</h2>
+            <p className="text-lg md:text-xl text-gray-700 text-center mb-8">What sets Phresh apart from the rest?</p>
+            
+            {/* Key Features */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+              <div className="flex items-start space-x-3">
+                <div className="flex-shrink-0 mt-1">
+                  <div className="w-6 h-6 rounded-full bg-green-800 flex items-center justify-center">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                </div>
+                <p className="text-gray-900 font-medium">Locally cold pressed</p>
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Cold-Pressed Goodness</h3>
-              <p className="text-gray-700">Fresh, nutrient-rich juices made with the finest ingredients</p>
-            </div>
-            <div className="text-center">
-              <div className="bg-primary/20 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
-                <Building2 className="h-10 w-10 text-primary" />
+              <div className="flex items-start space-x-3">
+                <div className="flex-shrink-0 mt-1">
+                  <div className="w-6 h-6 rounded-full bg-green-800 flex items-center justify-center">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                </div>
+                <p className="text-gray-900 font-medium">Hand packed</p>
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Made Fresh Daily</h3>
-              <p className="text-gray-700">Prepared fresh every day to ensure maximum nutrition</p>
-            </div>
-            <div className="text-center">
-              <div className="bg-primary/20 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
-                <Truck className="h-10 w-10 text-primary" />
+              <div className="flex items-start space-x-3">
+                <div className="flex-shrink-0 mt-1">
+                  <div className="w-6 h-6 rounded-full bg-green-800 flex items-center justify-center">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                </div>
+                <p className="text-gray-900 font-medium">Organically inspired</p>
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Delivered Fresh</h3>
-              <p className="text-gray-700">Fast delivery to keep your juices fresh and delicious</p>
             </div>
-            <div className="text-center">
-              <div className="bg-primary/20 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
-                <Zap className="h-10 w-10 text-primary" />
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Wellness Boosters</h3>
-              <p className="text-gray-700">Powerful cleanses and wellness shots for your health</p>
-            </div>
+
+            {/* Story Content */}
+            <div className="space-y-6 text-gray-700 leading-relaxed">
+              <p className="text-base md:text-lg">
+                We have been making juices in Manchester since 2023, after travelling Europe and South America we returned to rainy Manchester craving that quench of a cold pressed juice in the suburbs. Unfortunately the cold pressed juice scene is way behind the rest of the world, instead we are offered a rainbow of teeth rotting solutions.
+              </p>
+              
+              <p className="text-base md:text-lg font-semibold text-gray-900">
+                SO, we are here to introduce real natural juices to be indulged at any time of the day, even replacing whole food meals.
+              </p>
+              
+              <p className="text-base md:text-lg">
+                At Phresh we believe in small quantity, but aspire to extremely high grade quality.
+              </p>
+              
+              <p className="text-base md:text-lg">
+                Our aim is to introduce juicing to the world. To share our opinions, combinations of juices, whole food meals and an overall less toxic approach to all aspects of life.
+              </p>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-      {/* All Products Section - with bg.png background */}
+      {/* All Products Section - with bg-green.png background */}
       <section 
-        className="py-16 relative"
+        className="py-16 relative mt-8"
         style={{
-          backgroundImage: 'url(/bg.png)',
+          backgroundImage: 'url(/bg-green.png)',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat'
@@ -598,27 +678,29 @@ export const HomePage = () => {
               <p className="text-white/80">No products found.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 justify-items-center">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
               {products.map((product) => {
                       const primaryImage = product.image_urls?.[0] || product.image_url || "/api/placeholder/300/300";
                 // Use category name or description as tagline
                 const tagline = product.category?.name || product.description?.split('.')[0] || "Fresh & Healthy";
 
                       return (
-                  <div key={product.id} className="flex flex-col items-center text-center space-y-4 w-full">
-                    {/* Product Image */}
-                    <div className="relative w-full h-80 md:h-96 overflow-hidden rounded-lg">
+                  <div key={product.id} className="flex flex-col items-center text-center space-y-4 w-full max-w-full">
+                    {/* Product Image - Clickable */}
+                    <Link to={`/products/${product.id}`} className="relative w-full h-80 md:h-96 overflow-hidden rounded-lg cursor-pointer hover:opacity-90 transition-opacity">
                               <img
                                 src={primaryImage}
                                 alt={product.title}
                         className="w-full h-full object-cover"
                       />
-                            </div>
+                            </Link>
 
                     {/* Product Info */}
-                    <div className="space-y-2 w-full">
-                      <h3 className="text-xl md:text-2xl font-bold text-white">{product.title}</h3>
-                      <p className="text-sm md:text-base text-white/80">{tagline}</p>
+                    <div className="space-y-2 w-full px-2">
+                      <Link to={`/products/${product.id}`} className="block hover:text-green-200 transition-colors">
+                        <h3 className="text-xl md:text-2xl font-bold text-white line-clamp-2">{product.title}</h3>
+                      </Link>
+                      <p className="text-sm md:text-base text-white/80 line-clamp-2">{tagline}</p>
                       {(() => {
                         const cartItem = getCartItem(product.id);
                         if (cartItem && cartItem.quantity > 0) {
@@ -627,7 +709,10 @@ export const HomePage = () => {
                               <Button
                                 size="icon"
                                 className="bg-green-800 text-white hover:bg-green-900 h-10 w-10 rounded-full"
-                                onClick={() => handleDecrement(product.id)}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleDecrement(product.id);
+                                }}
                               >
                                 -
                               </Button>
@@ -637,7 +722,10 @@ export const HomePage = () => {
                               <Button
                                 size="icon"
                                 className="bg-green-800 text-white hover:bg-green-900 h-10 w-10 rounded-full"
-                                onClick={() => handleIncrement(product.id)}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleIncrement(product.id);
+                                }}
                               >
                                 +
                               </Button>
@@ -647,7 +735,10 @@ export const HomePage = () => {
                         return (
                           <Button 
                             className="w-full mt-4 bg-green-800 text-white hover:bg-green-900 font-semibold"
-                            onClick={() => handleAddToCart(product.id)}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleAddToCart(product.id);
+                            }}
                           >
                             ORDER NOW
                           </Button>

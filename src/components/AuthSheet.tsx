@@ -37,30 +37,22 @@ export const AuthSheet = ({ open, onOpenChange, defaultMode = "signin" }: AuthSh
     e.preventDefault();
     setLoading(true);
 
-    const { error } = await signIn(email, password);
+    const { error, user: loginUser } = await signIn(email, password);
     if (!error) {
       onOpenChange(false);
       setEmail("");
       setPassword("");
-      // Wait for user state to update, then check role and redirect
-      // The signIn function already reloads the profile, so we wait a bit for state to update
-      setTimeout(async () => {
-        try {
-          // Get userId from localStorage (stored during login) or from user state
-          const userId = localStorage.getItem('user_id') || user?._id;
-          // Get fresh user profile to check role
-          const profileResponse = await apiService.getProfile(userId || undefined);
-          if (profileResponse.success && profileResponse.data?.role === 'admin') {
-            // Use window.location for admin redirect to ensure clean state
-            window.location.href = "/admin-dashboard";
-          } else {
-            navigate("/");
-          }
-        } catch (err) {
-          // If profile fetch fails, just go to home
-          navigate("/");
-        }
-      }, 300);
+      
+      // Check role directly from login response user data
+      if (loginUser?.role === 'admin') {
+        console.log('User is admin from login response, redirecting to dashboard');
+        // Small delay to ensure state is updated
+        setTimeout(() => {
+          window.location.href = "/admin-dashboard";
+        }, 200);
+      } else {
+        navigate("/");
+      }
     }
 
     setLoading(false);
@@ -103,7 +95,7 @@ export const AuthSheet = ({ open, onOpenChange, defaultMode = "signin" }: AuthSh
         side="right" 
         className="w-full sm:max-w-lg overflow-y-auto"
         style={{
-          backgroundImage: 'url(/bg.png)',
+          backgroundImage: 'url(/bg-green.png)',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat'
@@ -111,8 +103,10 @@ export const AuthSheet = ({ open, onOpenChange, defaultMode = "signin" }: AuthSh
       >
         <div className="flex flex-col h-full">
           <SheetHeader className="mb-6">
-            <div className="text-center mb-6">
-              <img src="/phresh_logo.jpeg" alt="Phresh - Fresh Juices" className="mx-auto h-16 w-auto" />
+            <div className="text-center mb-6 mt-6">
+              <div className="inline-flex items-center justify-center p-3 rounded-lg">
+                <img src="/logo-white.png" alt="Phresh - Fresh Juices" className="h-12 w-auto" />
+              </div>
             </div>
             <SheetTitle className="sr-only">Authentication</SheetTitle>
           </SheetHeader>

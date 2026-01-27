@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { apiService } from "@/services/api";
-import { useAuth } from "./useAuth";
 import { toast } from "@/components/ui/use-toast";
 import { computeDiscountedPrice } from "@/utils/pricing";
 
@@ -26,34 +25,30 @@ export interface CartItem {
 export const useCart = () => {
   const [items, setItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const { user } = useAuth();
   const CART_EVENT = "cart-items-updated";
+  const CART_STORAGE_KEY = "phresh_cart";
 
   const setItemsAndBroadcast = (updatedItems: CartItem[]) => {
     setItems(updatedItems);
+    // Always save to localStorage immediately
     if (typeof window !== "undefined") {
+      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(updatedItems));
       window.dispatchEvent(new CustomEvent<CartItem[]>(CART_EVENT, { detail: updatedItems }));
     }
   };
 
-  // Load cart items from localStorage or database
+  // Load cart from localStorage on mount
   useEffect(() => {
-    if (user) {
-      loadCartFromDatabase();
-    } else {
-      loadCartFromStorage();
-    }
-  }, [user]);
+    loadCartFromStorage();
+  }, []);
 
   useEffect(() => {
     const handleCartUpdated = (event: Event) => {
       const customEvent = event as CustomEvent<CartItem[]>;
       if (customEvent.detail) {
         setItems(customEvent.detail);
-      } else if (!user) {
-        loadCartFromStorage();
       } else {
-        loadCartFromDatabase();
+        loadCartFromStorage();
       }
     };
 
@@ -66,63 +61,33 @@ export const useCart = () => {
         window.removeEventListener(CART_EVENT, handleCartUpdated);
       }
     };
-  }, [user]);
+  }, []);
 
+  // Load cart from localStorage (only storage)
   const loadCartFromStorage = () => {
-    const stored = localStorage.getItem("cart");
+    if (typeof window === "undefined") return;
+    
+    const stored = localStorage.getItem(CART_STORAGE_KEY);
     if (stored) {
       try {
         const parsedCart = JSON.parse(stored);
-        setItemsAndBroadcast(parsedCart);
+        setItems(parsedCart);
       } catch (error) {
         console.error("Error parsing cart from storage:", error);
+        localStorage.removeItem(CART_STORAGE_KEY);
       }
     }
   };
 
-  const loadCartFromDatabase = async () => {
-    if (!user) return;
-    
-    setLoading(true);
-    try {
-      const response = await apiService.getCart();
-      if (response.success && response.data?.items) {
-        // Ensure productId is set for all items (backend might return product._id instead)
-        // Also ensure image data is properly preserved
-        const mappedItems = response.data.items.map((item: any) => ({
-          ...item,
-          productId: item.productId || item.product?._id,
-          product: {
-            ...item.product,
-            image_url: item.product?.image_url || item.product?.images?.[0]?.url || item.product?.images?.[0] || null,
-            image_urls: item.product?.image_urls || item.product?.images?.map((img: any) => img.url || img) || [item.product?.image_url].filter(Boolean),
-            images: item.product?.images || null
-          }
-        }));
-        setItemsAndBroadcast(mappedItems);
-      }
-    } catch (error) {
-      console.error("Error loading cart:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Add to cart - uses localStorage only (instant, no API calls)
   const addToCart = async (
     productId: string,
     quantity: number = 1,
     options?: { variantSize?: string; variantPrice?: number }
   ) => {
-    if (user) {
-      await addToCartDatabase(productId, quantity, options);
-    } else {
-      await addToCartStorage(productId, quantity, options);
-    }
-  };
-
-  const addToCartStorage = async (productId: string, quantity: number, options?: { variantSize?: string; variantPrice?: number }) => {
-    // First get product details from backend
+    setLoading(true);
     try {
+      // Get product details from backend (needed for product info)
       const response = await apiService.getProduct(productId);
       if (!response.success || !response.data) {
         toast({
@@ -133,30 +98,44 @@ export const useCart = () => {
         return;
       }
 
-      const product = response.data;
-      const existingIndex = items.findIndex(item => item.productId === productId);
+      // Parse product data (handle nested response structure)
+      const raw = response.data as any;
+      let productData = raw;
+      if (raw?.data?.data && Array.isArray(raw.data.data)) {
+        productData = raw.data.data[0];
+      } else if (raw?.data && !Array.isArray(raw.data)) {
+        productData = raw.data;
+      }
+
+      const product = productData;
+      const existingIndex = items.findIndex(item => 
+        item.productId === productId && 
+        item.variant_size === (options?.variantSize ?? null)
+      );
+      
       let newItems: CartItem[];
 
       if (existingIndex >= 0) {
+        // Update existing item quantity
         newItems = [...items];
         newItems[existingIndex].quantity += quantity;
-        // Update variant if provided (single-variant per product in cart)
         if (options?.variantPrice !== undefined) newItems[existingIndex].variant_price = options.variantPrice;
         if (options?.variantSize !== undefined) newItems[existingIndex].variant_size = options.variantSize;
       } else {
+        // Add new item
         const newItem: CartItem = {
-          _id: `temp-${Date.now()}`,
+          _id: `local-${Date.now()}-${Math.random()}`,
           productId: productId,
           quantity,
           variant_size: options?.variantSize ?? null,
           variant_price: options?.variantPrice ?? null,
           product: {
-            _id: product._id,
+            _id: product._id || productId,
             name: product.name,
             price: product.price,
-            discount: product.discount,
-            discount_amount: product.discount_amount,
-            discount_type: product.discount_type,
+            discount: product.discount || null,
+            discount_amount: product.discount_amount || null,
+            discount_type: product.discount_type || null,
             image_url: product.image_url || product.images?.[0]?.url || product.images?.[0] || null,
             image_urls: product.image_urls || product.images?.map((img: any) => img.url || img) || [product.image_url].filter(Boolean),
             images: product.images || null
@@ -165,8 +144,8 @@ export const useCart = () => {
         newItems = [...items, newItem];
       }
 
+      // Update localStorage immediately (instant UX)
       setItemsAndBroadcast(newItems);
-      localStorage.setItem("cart", JSON.stringify(newItems));
       
       toast({
         title: "Added to cart",
@@ -179,113 +158,45 @@ export const useCart = () => {
         description: "Failed to add product to cart",
         variant: "destructive"
       });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const addToCartDatabase = async (productId: string, quantity: number, options?: { variantSize?: string; variantPrice?: number }) => {
-    try {
-      const response = await apiService.addToCart({
-        productId,
-        quantity,
-        variant_size: options?.variantSize,
-        variant_price: options?.variantPrice
-      });
-
-      if (response.success) {
-        await loadCartFromDatabase();
-        
-        toast({
-          title: "Added to cart",
-          description: "Product has been added to your cart."
-        });
-      } else {
-        throw new Error(response.message || "Failed to add to cart");
-      }
-    } catch (error) {
-      console.error("Error adding to cart:", error);
-      toast({
-        title: "Error",
-        description: "Failed to add product to cart",
-        variant: "destructive"
-      });
-    }
-  };
-
+  // Remove from cart - uses localStorage only (instant, no API calls)
   const removeFromCart = async (itemId: string) => {
-    if (user) {
-      try {
-        const response = await apiService.removeFromCart(itemId);
-        if (response.success) {
-          await loadCartFromDatabase();
-        } else {
-          throw new Error(response.message || "Failed to remove from cart");
-        }
-      } catch (error) {
-        console.error("Error removing from cart:", error);
-        toast({
-          title: "Error",
-          description: "Failed to remove item from cart",
-          variant: "destructive"
-        });
-      }
-    } else {
-      const newItems = items.filter(item => item._id !== itemId);
-      setItemsAndBroadcast(newItems);
-      localStorage.setItem("cart", JSON.stringify(newItems));
-    }
+    const newItems = items.filter(item => item._id !== itemId);
+    
+    // Update localStorage immediately (instant UX)
+    setItemsAndBroadcast(newItems);
+    
+    toast({
+      title: "Removed",
+      description: "Item removed from cart"
+    });
   };
 
+  // Update quantity - uses localStorage only (instant, no API calls)
   const updateQuantity = async (itemId: string, quantity: number) => {
     if (quantity <= 0) {
       await removeFromCart(itemId);
       return;
     }
 
-    if (user) {
-      try {
-        const response = await apiService.updateCartItem(itemId, quantity);
-        if (response.success) {
-          await loadCartFromDatabase();
-        } else {
-          throw new Error(response.message || "Failed to update quantity");
-        }
-      } catch (error) {
-        console.error("Error updating quantity:", error);
-        toast({
-          title: "Error",
-          description: "Failed to update quantity",
-          variant: "destructive"
-        });
-      }
-    } else {
-      const newItems = items.map(item =>
-        item._id === itemId ? { ...item, quantity } : item
-      );
-      setItemsAndBroadcast(newItems);
-      localStorage.setItem("cart", JSON.stringify(newItems));
-    }
+    const newItems = items.map(item =>
+      item._id === itemId ? { ...item, quantity } : item
+    );
+    
+    // Update localStorage immediately (instant UX)
+    setItemsAndBroadcast(newItems);
   };
 
+  // Clear cart - uses localStorage only (instant, no API calls)
   const clearCart = async () => {
-    if (user) {
-      try {
-        const response = await apiService.clearCart();
-        if (response.success) {
-          setItemsAndBroadcast([]);
-        } else {
-          throw new Error(response.message || "Failed to clear cart");
-        }
-      } catch (error) {
-        console.error("Error clearing cart:", error);
-        toast({
-          title: "Error",
-          description: "Failed to clear cart",
-          variant: "destructive"
-        });
-      }
-    } else {
-      setItemsAndBroadcast([]);
-      localStorage.removeItem("cart");
+    // Clear localStorage immediately (instant UX)
+    setItemsAndBroadcast([]);
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(CART_STORAGE_KEY);
     }
   };
 

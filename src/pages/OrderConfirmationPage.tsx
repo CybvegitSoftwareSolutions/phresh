@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { CheckCircle, Package, Truck, Mail, Phone, MapPin, Calendar } from "lucide-react";
 import { apiService } from "@/services/api";
+import { useCart } from "@/hooks/useCart";
 
 interface Order {
   _id: string;
@@ -59,13 +60,24 @@ export const OrderConfirmationPage = () => {
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [shippingSettings, setShippingSettings] = useState<ShippingSettings | null>(null);
+  const { clearCart } = useCart();
 
   useEffect(() => {
     if (orderNumber) {
+      // Check if this is a Stripe redirect with successful payment
+      const paymentIntent = searchParams.get('payment_intent');
+      const paymentIntentClientSecret = searchParams.get('payment_intent_client_secret');
+      
+      // If payment was successful via redirect, clear the cart
+      if (paymentIntent && paymentIntentClientSecret) {
+        // Payment was successful (Stripe redirected back)
+        clearCart();
+      }
+      
       fetchOrderDetails();
       fetchShippingSettings();
     }
-  }, [orderNumber]);
+  }, [orderNumber, searchParams, clearCart]);
 
   const fetchOrderDetails = async () => {
     try {
@@ -206,7 +218,7 @@ export const OrderConfirmationPage = () => {
 
   const formatCurrency = (value: number | string) => {
     const amount = Number(value) || 0;
-    return `Rs ${Math.round(amount).toLocaleString('en-IN')}`;
+    return `£${Math.round(amount).toLocaleString('en-IN')}`;
   };
 
   const handleDownloadPdf = () => {

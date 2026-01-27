@@ -146,7 +146,7 @@ export const useAuth = () => {
           title: "Welcome back",
           description: "You're now signed in to Phresh.",
         });
-        return { error: null };
+        return { error: null, user: loginUser };
       } else {
         toast({
           title: "Invalid credentials",

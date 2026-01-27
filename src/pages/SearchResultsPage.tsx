@@ -205,16 +205,16 @@ export const SearchResultsPage = () => {
 
                     <div className="mt-auto flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
                       <span className="text-base font-semibold text-primary">
-                        Rs {pricing.finalPrice.toLocaleString('en-IN')}
+                        £{pricing.finalPrice.toLocaleString('en-IN')}
                       </span>
                       {pricing.hasDiscount && (
                         <>
                           <span className="text-xs text-muted-foreground line-through">
-                            Rs {pricing.basePrice.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                            £{pricing.basePrice.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                           </span>
                           {savings > 0 && (
                             <span className="text-xs font-medium text-emerald-600">
-                              Save Rs {savings.toLocaleString('en-IN')}
+                              Save £{savings.toLocaleString('en-IN')}
                             </span>
                           )}
                         </>

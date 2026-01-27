@@ -61,7 +61,7 @@ export const DashboardOverview = () => {
     },
     {
       title: "Total Revenue",
-      value: `Rs ${stats.totalRevenue.toFixed(2)}`,
+      value: `£${stats.totalRevenue.toFixed(2)}`,
       icon: DollarSign,
       description: "Total earnings",
       color: "text-green-600",

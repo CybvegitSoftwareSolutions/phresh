@@ -40,7 +40,7 @@ export const ProductsPage = () => {
   const [authSheetOpen, setAuthSheetOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [searchParams, setSearchParams] = useSearchParams();
-  const { addToCart, items } = useCart();
+  const { addToCart, items, updateQuantity, removeFromCart } = useCart();
   const { user } = useAuth();
   const location = useLocation();
 
@@ -129,17 +129,40 @@ export const ProductsPage = () => {
     setSearchParams(params);
   };
 
+  const getCartItem = (productId: string) => {
+    return items.find(item => item.productId === productId);
+  };
+
   const handleAddToCart = async (productId: string) => {
     await addToCart(productId, 1);
   };
 
+  const handleIncrement = async (productId: string) => {
+    const cartItem = getCartItem(productId);
+    if (cartItem) {
+      await updateQuantity(cartItem._id, cartItem.quantity + 1);
+    }
+  };
+
+  const handleDecrement = async (productId: string) => {
+    const cartItem = getCartItem(productId);
+    if (cartItem) {
+      if (cartItem.quantity > 1) {
+        await updateQuantity(cartItem._id, cartItem.quantity - 1);
+      } else {
+        // Remove from cart when quantity is 1
+        await removeFromCart(cartItem._id);
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen">
-      {/* Header Section with bg.png background */}
+      {/* Header Section with bg-green.png background */}
       <div
         className="relative w-full"
         style={{
-          backgroundImage: 'url(/bg.png)',
+          backgroundImage: 'url(/bg-green.png)',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat'
@@ -252,12 +275,40 @@ export const ProductsPage = () => {
                     <div className="space-y-2 w-full">
                       <h3 className="text-xl md:text-2xl font-bold text-white">{product.title}</h3>
                       <p className="text-sm md:text-base text-white/80">{tagline}</p>
-                      <Button
-                        className="w-full mt-4 bg-green-800 text-white hover:bg-green-900 font-semibold"
-                        onClick={() => handleAddToCart(product.id)}
-                      >
-                        ORDER NOW
-                      </Button>
+                      {(() => {
+                        const cartItem = getCartItem(product.id);
+                        if (cartItem && cartItem.quantity > 0) {
+                          return (
+                            <div className="flex items-center justify-center gap-2 mt-4">
+                              <Button
+                                size="icon"
+                                className="bg-green-800 text-white hover:bg-green-900 h-10 w-10 rounded-full"
+                                onClick={() => handleDecrement(product.id)}
+                              >
+                                -
+                              </Button>
+                              <span className="text-white font-semibold text-lg min-w-[2rem] text-center">
+                                {cartItem.quantity}
+                              </span>
+                              <Button
+                                size="icon"
+                                className="bg-green-800 text-white hover:bg-green-900 h-10 w-10 rounded-full"
+                                onClick={() => handleIncrement(product.id)}
+                              >
+                                +
+                              </Button>
+                            </div>
+                          );
+                        }
+                        return (
+                          <Button
+                            className="w-full mt-4 bg-green-800 text-white hover:bg-green-900 font-semibold"
+                            onClick={() => handleAddToCart(product.id)}
+                          >
+                            ORDER NOW
+                          </Button>
+                        );
+                      })()}
                     </div>
                   </div>
               );
@@ -266,6 +317,9 @@ export const ProductsPage = () => {
         )}
       </div>
     </section>
+
+    {/* Footer with bg-green.png background */}
+    <Footer />
 
     {/* Auth Sheet */}
     <AuthSheet open={authSheetOpen} onOpenChange={setAuthSheetOpen} defaultMode={authMode} />

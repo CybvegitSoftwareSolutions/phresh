@@ -321,7 +321,7 @@ export const AdminDashboard = () => {
                   <DollarSign className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">Rs {stats.totalRevenue.toFixed(2)}</div>
+                  <div className="text-2xl font-bold">£{stats.totalRevenue.toFixed(2)}</div>
                 </CardContent>
               </Card>
 
@@ -403,7 +403,7 @@ export const AdminDashboard = () => {
                                 {getStatusBadge(order.status)}
                               </div>
                               <div className="text-right">
-                                <p className="font-semibold">Rs {Number(order.total_amount).toFixed(2)}</p>
+                                <p className="font-semibold">£{Number(order.total_amount).toFixed(2)}</p>
                                 <p className="text-sm text-muted-foreground">
                                   {new Date(order.createdAt).toLocaleDateString()}
                                 </p>
@@ -412,7 +412,7 @@ export const AdminDashboard = () => {
 
                             <div className="flex items-center justify-between">
                               <div className="text-sm text-muted-foreground">
-                                {order.order_items?.length || 0} item(s) • Phone: {order.customer_phone} • Shipping: {shippingCharge > 0 ? `Rs ${shippingCharge.toFixed(2)}` : 'Free'}
+                                {order.order_items?.length || 0} item(s) • Phone: {order.customer_phone} • Shipping: {shippingCharge > 0 ? `£${shippingCharge.toFixed(2)}` : 'Free'}
                               </div>
 
                               <Dialog onOpenChange={(open) => { if (!open) setSelectedOrder(null); }}>
@@ -447,7 +447,7 @@ export const AdminDashboard = () => {
                                         </div>
                                         <div>
                                           <Label>Total Amount</Label>
-                                          <p className="text-lg font-semibold">Rs {Number(selectedOrder.total_amount).toFixed(2)}</p>
+                                          <p className="text-lg font-semibold">£{Number(selectedOrder.total_amount).toFixed(2)}</p>
                                         </div>
                                       </div>
 
@@ -464,7 +464,7 @@ export const AdminDashboard = () => {
                                           {selectedOrder.order_items?.map((item, index) => (
                                             <div key={index} className="flex justify-between text-sm">
                                               <span>{item.product.name} x {item.quantity}</span>
-                                              <span>Rs {(item.price_at_time * item.quantity).toFixed(2)}</span>
+                                              <span>£{(item.price_at_time * item.quantity).toFixed(2)}</span>
                                             </div>
                                           ))}
                                         </div>
@@ -476,15 +476,15 @@ export const AdminDashboard = () => {
                                           <div className="border-t pt-3 space-y-1 text-sm">
                                             <div className="flex justify-between text-muted-foreground">
                                               <span>Items Subtotal</span>
-                                              <span>Rs {totals.itemsTotal.toFixed(2)}</span>
+                                              <span>£{totals.itemsTotal.toFixed(2)}</span>
                                             </div>
                                             <div className="flex justify-between text-muted-foreground">
                                               <span>Shipping</span>
-                                              <span>Rs {totals.shippingCharge.toFixed(2)}</span>
+                                              <span>£{totals.shippingCharge.toFixed(2)}</span>
                                             </div>
                                             <div className="flex justify-between font-semibold">
                                               <span>Total</span>
-                                              <span>Rs {Number(selectedOrder.total_amount).toFixed(2)}</span>
+                                              <span>£{Number(selectedOrder.total_amount).toFixed(2)}</span>
                                             </div>
                                           </div>
                                         );

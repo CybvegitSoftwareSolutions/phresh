@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/use-toast";
-import { Edit, MoveUp, MoveDown, Eye, EyeOff } from "lucide-react";
+import { Edit, MoveUp, MoveDown, Eye, EyeOff, FolderOpen, ImageIcon } from "lucide-react";
 
 interface Category {
   _id: string;
@@ -17,7 +17,10 @@ interface Category {
   slug: string;
   description: string | null;
   image_url?: string;
+  homepage_image_url?: string;
+  homepage_description?: string;
   order: number;
+  show_on_homepage?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -221,7 +224,8 @@ export const HomepageCategoriesManagement = () => {
   const otherCategories = categories.filter(c => c.show_on_homepage === false);
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-8">
+      {/* Header */}
       <div>
         <h2 className="text-2xl font-bold mb-2">Homepage Categories</h2>
         <p className="text-muted-foreground">
@@ -230,85 +234,146 @@ export const HomepageCategoriesManagement = () => {
       </div>
 
       {/* Homepage Categories */}
-      <div>
-        <h3 className="text-lg font-semibold mb-4">Categories on Homepage</h3>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold">Categories on Homepage</h3>
+          <Badge variant="outline">
+            {homepageCategories.length} {homepageCategories.length === 1 ? 'category' : 'categories'}
+          </Badge>
+        </div>
+        
         {homepageCategories.length === 0 ? (
-          <Card>
-            <CardContent className="p-6 text-center">
-              <p className="text-muted-foreground">No categories are currently displayed on homepage</p>
+          <Card className="shadow-soft">
+            <CardContent className="p-12 text-center">
+              <FolderOpen className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <p className="text-muted-foreground text-lg">No categories are currently displayed on homepage</p>
+              <p className="text-sm text-muted-foreground mt-2">
+                Add categories from the available categories below
+              </p>
             </CardContent>
           </Card>
         ) : (
           <div className="space-y-4">
             {homepageCategories
               .sort((a, b) => a.order - b.order)
-              .map((category, index) => (
-                <Card key={category._id}>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className="flex flex-col space-y-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => moveCategory(category._id, 'up')}
-                            disabled={index === 0}
-                          >
-                            <MoveUp className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => moveCategory(category._id, 'down')}
-                            disabled={index === homepageCategories.length - 1}
-                          >
-                            <MoveDown className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        <div>
-                          <h4 className="font-semibold">{category.name}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            Order: {category.order}
-                          </p>
-                          {category.description && (
-                            <p className="text-sm text-muted-foreground mt-1">
-                              {category.description}
-                            </p>
+              .map((category, index) => {
+                const categoryImage = category.homepage_image_url || category.image_url || '';
+                return (
+                  <Card key={category._id} className="shadow-soft hover:shadow-luxury transition-shadow overflow-hidden">
+                    <div className="flex items-stretch">
+                      {/* Left: Image block */}
+                      <div className="w-28 md:w-32 lg:w-40 flex-shrink-0">
+                        <div className="h-24 md:h-28 lg:h-32 bg-muted rounded-lg flex items-center justify-center overflow-hidden">
+                          {categoryImage ? (
+                            <img
+                              src={categoryImage}
+                              alt={category.name}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                const target = e.currentTarget;
+                                target.style.display = 'none';
+                                const parent = target.parentElement;
+                                if (parent && !parent.querySelector('.fallback-icon')) {
+                                  const icon = document.createElement('div');
+                                  icon.className = 'fallback-icon flex items-center justify-center';
+                                  icon.innerHTML = '<svg class="h-10 w-10 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>';
+                                  parent.appendChild(icon);
+                                }
+                              }}
+                            />
+                          ) : (
+                            <FolderOpen className="h-10 w-10 text-muted-foreground" />
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openEditDialog(category)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => toggleHomepageVisibility(category._id, true)}
-                          title="Hide from homepage"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
+
+                      {/* Center: Details */}
+                      <div className="flex-1 min-w-0 pl-4 flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h4 className="font-semibold text-lg">{category.name}</h4>
+                            <Badge variant="default" className="bg-green-500">
+                              <Eye className="h-3 w-3 mr-1" />
+                              On Homepage
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground mb-2">
+                            {category.homepage_description || category.description || "No description"}
+                          </p>
+                          <div className="flex flex-wrap gap-3 text-xs">
+                            <span className="text-muted-foreground">
+                              Order: <span className="font-medium">{category.order}</span>
+                            </span>
+                            {category.slug && (
+                              <span className="text-muted-foreground">
+                                Slug: <span className="font-mono">{category.slug}</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Right: Actions */}
+                        <div className="flex items-center space-x-2 flex-shrink-0 ml-4">
+                          <div className="flex flex-col space-y-1 mr-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => moveCategory(category._id, 'up')}
+                              disabled={index === 0}
+                              title="Move up"
+                            >
+                              <MoveUp className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => moveCategory(category._id, 'down')}
+                              disabled={index === homepageCategories.length - 1}
+                              title="Move down"
+                            >
+                              <MoveDown className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openEditDialog(category)}
+                            title="Edit settings"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => toggleHomepageVisibility(category._id, true)}
+                            title="Hide from homepage"
+                          >
+                            <EyeOff className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
+                  </Card>
+                );
+              })}
           </div>
         )}
       </div>
 
-      {/* Other Categories */}
-      <div>
-        <h3 className="text-lg font-semibold mb-4">Available Categories</h3>
+      {/* Available Categories */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold">Available Categories</h3>
+          <Badge variant="outline">
+            {otherCategories.length} {otherCategories.length === 1 ? 'category' : 'categories'}
+          </Badge>
+        </div>
+        
         {otherCategories.length === 0 ? (
-          <Card>
-            <CardContent className="p-6 text-center">
-              <p className="text-muted-foreground">
+          <Card className="shadow-soft">
+            <CardContent className="p-12 text-center">
+              <FolderOpen className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <p className="text-muted-foreground text-lg">
                 {categories.length === 0 
                   ? "No categories available" 
                   : "All categories are displayed on homepage"}
@@ -316,38 +381,76 @@ export const HomepageCategoriesManagement = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {otherCategories.map((category) => (
-              <Card key={category._id}>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-semibold">{category.name}</h4>
-                      <p className="text-sm text-muted-foreground">
-                        {category.description}
-                      </p>
+          <div className="space-y-4">
+            {otherCategories.map((category) => {
+              const categoryImage = category.image_url || '';
+              return (
+                <Card key={category._id} className="shadow-soft hover:shadow-luxury transition-shadow overflow-hidden">
+                  <div className="flex items-stretch">
+                    {/* Left: Image block */}
+                    <div className="w-28 md:w-32 lg:w-40 flex-shrink-0">
+                      <div className="h-24 md:h-28 lg:h-32 bg-muted rounded-lg flex items-center justify-center overflow-hidden">
+                        {categoryImage ? (
+                          <img
+                            src={categoryImage}
+                            alt={category.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              const target = e.currentTarget;
+                              target.style.display = 'none';
+                              const parent = target.parentElement;
+                              if (parent && !parent.querySelector('.fallback-icon')) {
+                                const icon = document.createElement('div');
+                                icon.className = 'fallback-icon flex items-center justify-center';
+                                icon.innerHTML = '<svg class="h-10 w-10 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>';
+                                parent.appendChild(icon);
+                              }
+                            }}
+                          />
+                        ) : (
+                          <FolderOpen className="h-10 w-10 text-muted-foreground" />
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openEditDialog(category)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => toggleHomepageVisibility(category._id, false)}
-                        title="Show on homepage"
-                      >
-                        <EyeOff className="h-4 w-4" />
-                      </Button>
+
+                    {/* Center: Details */}
+                    <div className="flex-1 min-w-0 pl-4 flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-semibold text-lg mb-2">{category.name}</h4>
+                        <p className="text-sm text-muted-foreground mb-2">
+                          {category.description || "No description"}
+                        </p>
+                        {category.slug && (
+                          <p className="text-xs text-muted-foreground font-mono">
+                            {category.slug}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Right: Actions */}
+                      <div className="flex items-center space-x-2 flex-shrink-0 ml-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openEditDialog(category)}
+                          title="Edit settings"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => toggleHomepageVisibility(category._id, false)}
+                          title="Show on homepage"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>

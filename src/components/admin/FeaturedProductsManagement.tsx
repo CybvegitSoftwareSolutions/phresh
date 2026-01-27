@@ -228,7 +228,7 @@ export function FeaturedProductsManagement() {
                       <div>
                         <p className="font-medium">{product.name || 'Unknown Product'}</p>
                         <div className="flex items-center space-x-2">
-                          <p className="text-sm text-muted-foreground">Rs {product.price || 0}</p>
+                          <p className="text-sm text-muted-foreground">£{product.price || 0}</p>
                           {product.category && (
                             <Badge variant="outline" className="text-xs">
                               {product.category}
@@ -288,7 +288,7 @@ export function FeaturedProductsManagement() {
                       </div>
                       <div>
                         <CardTitle className="text-lg">{product.name || 'Unknown Product'}</CardTitle>
-                        <CardDescription>Rs {product.price || 0}</CardDescription>
+                        <CardDescription>£{product.price || 0}</CardDescription>
                       </div>
                     </div>
                     

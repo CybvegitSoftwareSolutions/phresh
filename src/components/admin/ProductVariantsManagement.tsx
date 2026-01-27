@@ -24,17 +24,26 @@ const ProductVariantsManagement = ({ variants, onChange }: ProductVariantsManage
     price: 0,
     stock_quantity: 0
   });
+  
+  // Local state for input values to allow typing
+  const [priceInput, setPriceInput] = useState<string>("");
+  const [stockInput, setStockInput] = useState<string>("");
 
   const addVariant = () => {
-    if (!newVariant.size || newVariant.price <= 0) return;
+    const price = parseFloat(priceInput) || 0;
+    if (!newVariant.size || price <= 0) return;
     
     const variant = {
-      ...newVariant,
+      size: newVariant.size,
+      price: price,
+      stock_quantity: parseInt(stockInput) || 0,
       id: `temp_${Date.now()}` // Temporary ID for new variants
     };
     
     onChange([...variants, variant]);
     setNewVariant({ size: "", price: 0, stock_quantity: 0 });
+    setPriceInput("");
+    setStockInput("");
   };
 
   const updateVariant = (index: number, field: keyof ProductVariant, value: string | number) => {
@@ -76,13 +85,16 @@ const ProductVariantsManagement = ({ variants, onChange }: ProductVariantsManage
                     />
                   </div>
                   <div>
-                    <Label className="text-sm">Price (Rs)</Label>
+                    <Label className="text-sm">Price (£)</Label>
                     <Input
                       type="number"
                       step="0.01"
                       min="0"
-                      value={variant.price}
-                      onChange={(e) => updateVariant(index, 'price', parseFloat(e.target.value) || 0)}
+                      value={variant.price || ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        updateVariant(index, 'price', value === "" ? 0 : parseFloat(value) || 0);
+                      }}
                     />
                   </div>
                   <div>
@@ -90,8 +102,11 @@ const ProductVariantsManagement = ({ variants, onChange }: ProductVariantsManage
                     <Input
                       type="number"
                       min="0"
-                      value={variant.stock_quantity}
-                      onChange={(e) => updateVariant(index, 'stock_quantity', parseInt(e.target.value) || 0)}
+                      value={variant.stock_quantity || ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        updateVariant(index, 'stock_quantity', value === "" ? 0 : parseInt(value) || 0);
+                      }}
                     />
                   </div>
                   <div>
@@ -127,13 +142,13 @@ const ProductVariantsManagement = ({ variants, onChange }: ProductVariantsManage
               />
             </div>
             <div>
-              <Label className="text-sm">Price (Rs)</Label>
+              <Label className="text-sm">Price (£)</Label>
               <Input
                 type="number"
                 step="0.01"
                 min="0"
-                value={newVariant.price}
-                onChange={(e) => setNewVariant({ ...newVariant, price: parseFloat(e.target.value) || 0 })}
+                value={priceInput}
+                onChange={(e) => setPriceInput(e.target.value)}
                 placeholder="0.00"
               />
             </div>
@@ -142,15 +157,15 @@ const ProductVariantsManagement = ({ variants, onChange }: ProductVariantsManage
               <Input
                 type="number"
                 min="0"
-                value={newVariant.stock_quantity}
-                onChange={(e) => setNewVariant({ ...newVariant, stock_quantity: parseInt(e.target.value) || 0 })}
+                value={stockInput}
+                onChange={(e) => setStockInput(e.target.value)}
                 placeholder="0"
               />
             </div>
             <div>
               <Button
                 onClick={addVariant}
-                disabled={!newVariant.size || newVariant.price <= 0}
+                disabled={!newVariant.size || !priceInput || parseFloat(priceInput) <= 0}
                 className="gradient-luxury"
               >
                 <Plus className="h-4 w-4 mr-1" />
