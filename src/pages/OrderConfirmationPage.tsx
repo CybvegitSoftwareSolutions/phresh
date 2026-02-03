@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,8 @@ interface Order {
   status: string;
   createdAt: string;
   notes?: string;
+  paymentMethod?: string;
+  paymentStatus?: string;
   // Backend fields
   subtotal?: number;
   shippingCost?: number;
@@ -60,24 +62,37 @@ export const OrderConfirmationPage = () => {
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [shippingSettings, setShippingSettings] = useState<ShippingSettings | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
+  const [paymentStatusLoading, setPaymentStatusLoading] = useState(false);
   const { clearCart } = useCart();
+  const clearCartRef = useRef(clearCart);
+  const paymentStatusRef = useRef(paymentStatus);
 
   useEffect(() => {
-    if (orderNumber) {
-      // Check if this is a Stripe redirect with successful payment
-      const paymentIntent = searchParams.get('payment_intent');
-      const paymentIntentClientSecret = searchParams.get('payment_intent_client_secret');
-      
-      // If payment was successful via redirect, clear the cart
-      if (paymentIntent && paymentIntentClientSecret) {
-        // Payment was successful (Stripe redirected back)
-        clearCart();
-      }
-      
-      fetchOrderDetails();
-      fetchShippingSettings();
+    clearCartRef.current = clearCart;
+  }, [clearCart]);
+
+  useEffect(() => {
+    paymentStatusRef.current = paymentStatus;
+  }, [paymentStatus]);
+
+  const searchParamsString = searchParams.toString();
+
+  useEffect(() => {
+    if (!orderNumber) return;
+    // Check if this is a Stripe redirect with successful payment
+    const paymentIntent = searchParams.get('payment_intent');
+    const paymentIntentClientSecret = searchParams.get('payment_intent_client_secret');
+
+    // If payment was successful via redirect, clear the cart
+    if (paymentIntent && paymentIntentClientSecret) {
+      // Payment was successful (Stripe redirected back)
+      clearCartRef.current();
     }
-  }, [orderNumber, searchParams, clearCart]);
+
+    fetchOrderDetails();
+    fetchShippingSettings();
+  }, [orderNumber, searchParamsString]);
 
   const fetchOrderDetails = async () => {
     try {
@@ -123,6 +138,8 @@ export const OrderConfirmationPage = () => {
         status: orderData.orderStatus || orderData.status || 'pending',
         createdAt: orderData.createdAt,
         notes: orderData.notes || '',
+        paymentMethod: orderData.paymentMethod || orderData.payment_method || orderData.paymentType || '',
+        paymentStatus: orderData.paymentStatus || orderData.payment_status || '',
         // Store backend fields for calculations
         subtotal: orderData.subtotal,
         shippingCost: orderData.shippingCost,
@@ -152,6 +169,81 @@ export const OrderConfirmationPage = () => {
       setLoading(false);
     }
   };
+
+  const normalizePaymentStatus = (status?: string | null) => {
+    if (!status) return null;
+    return status.toLowerCase();
+  };
+
+  useEffect(() => {
+    if (!orderNumber || !order) return;
+    const normalizedMethod = order.paymentMethod ? order.paymentMethod.toLowerCase() : '';
+    if (normalizedMethod && normalizedMethod !== 'stripe') return;
+
+    const terminalStatuses = new Set([
+      'succeeded',
+      'paid',
+      'failed',
+      'canceled',
+      'requires_payment_method'
+    ]);
+    const currentStatus = normalizePaymentStatus(paymentStatusRef.current || order.paymentStatus);
+    if (currentStatus && terminalStatuses.has(currentStatus)) {
+      setPaymentStatus(currentStatus);
+      setPaymentStatusLoading(false);
+      return;
+    }
+
+    let isActive = true;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const pendingStatuses = new Set([
+      'processing',
+      'requires_action',
+      'requires_confirmation',
+      'requires_capture',
+      'pending'
+    ]);
+    const maxAttempts = 5;
+
+    const checkPaymentStatus = async (attempt: number) => {
+      if (attempt === 0) {
+        setPaymentStatusLoading(true);
+      }
+
+      const response = await apiService.getPaymentStatus({ orderNumber });
+      if (!isActive) return;
+
+      if (response.success) {
+        const rawStatus =
+          (response.data as any)?.status ||
+          (response.data as any)?.paymentStatus ||
+          (response.data as any)?.payment_intent_status ||
+          (response.data as any)?.paymentIntent?.status ||
+          paymentStatusRef.current ||
+          null;
+        const normalized = normalizePaymentStatus(rawStatus);
+        if (normalized) {
+          setPaymentStatus(normalized);
+        }
+
+        if (normalized && pendingStatuses.has(normalized) && attempt < maxAttempts) {
+          retryTimer = setTimeout(() => checkPaymentStatus(attempt + 1), 3000);
+          return;
+        }
+      }
+
+      setPaymentStatusLoading(false);
+    };
+
+    checkPaymentStatus(0);
+
+    return () => {
+      isActive = false;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
+    };
+  }, [orderNumber, order?._id, order?.paymentMethod, order?.paymentStatus]);
 
   const fetchShippingSettings = async () => {
     try {
@@ -220,6 +312,47 @@ export const OrderConfirmationPage = () => {
     const amount = Number(value) || 0;
     return `£${Math.round(amount).toLocaleString('en-IN')}`;
   };
+
+  const normalizedPaymentStatus = normalizePaymentStatus(paymentStatus);
+  const normalizedPaymentMethod = order.paymentMethod ? order.paymentMethod.toLowerCase() : '';
+  const isStripePayment = !normalizedPaymentMethod || normalizedPaymentMethod === 'stripe';
+  const paymentStatusMeta = (() => {
+    if (!isStripePayment) {
+      return { label: 'Not required', variant: 'outline' as const };
+    }
+    if (paymentStatusLoading) {
+      return { label: 'Checking...', variant: 'outline' as const };
+    }
+    if (!normalizedPaymentStatus) {
+      return { label: 'Unavailable', variant: 'outline' as const };
+    }
+    if (['succeeded', 'paid'].includes(normalizedPaymentStatus)) {
+      return { label: 'Paid', variant: 'secondary' as const };
+    }
+    if (['failed', 'canceled', 'requires_payment_method'].includes(normalizedPaymentStatus)) {
+      return { label: 'Failed', variant: 'outline' as const };
+    }
+    if (normalizedPaymentStatus === 'requires_action') {
+      return { label: 'Action required', variant: 'outline' as const };
+    }
+    return { label: 'Pending', variant: 'outline' as const };
+  })();
+
+  const paymentStatusNote = (() => {
+    if (!isStripePayment) return null;
+    if (paymentStatusLoading) return 'Checking payment status...';
+    if (!normalizedPaymentStatus) return 'Payment status is not available yet.';
+    if (normalizedPaymentStatus === 'requires_action') {
+      return 'Payment needs additional authentication. Please retry from checkout.';
+    }
+    if (['failed', 'canceled', 'requires_payment_method'].includes(normalizedPaymentStatus)) {
+      return 'Payment did not complete. You can retry from checkout.';
+    }
+    if (['processing', 'requires_confirmation', 'requires_capture', 'pending'].includes(normalizedPaymentStatus)) {
+      return 'Payment is processing. This may take a minute.';
+    }
+    return null;
+  })();
 
   const handleDownloadPdf = () => {
     if (!order) return;
@@ -412,6 +545,17 @@ export const OrderConfirmationPage = () => {
                     </Badge>
                   </div>
                   <div>
+                    <p className="font-medium">Payment Status</p>
+                    <div className="flex flex-col gap-1">
+                      <Badge variant={paymentStatusMeta.variant} className="w-fit">
+                        {paymentStatusMeta.label}
+                      </Badge>
+                      {paymentStatusNote ? (
+                        <span className="text-xs text-muted-foreground">{paymentStatusNote}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div>
                     <p className="font-medium">Total Amount</p>
                     <p className="font-semibold">{formatCurrency(order.total_amount)}</p>
                   </div>
@@ -569,7 +713,7 @@ export const OrderConfirmationPage = () => {
                 <div className="space-y-2 text-sm">
                   <div>
                     <p className="font-medium">Email Support</p>
-                    <p className="text-muted-foreground">support@phresh.com</p>
+                    <p className="text-muted-foreground">info@phreshmcr.com</p>
                   </div>
                   <div>
                     <p className="font-medium">WhatsApp</p>

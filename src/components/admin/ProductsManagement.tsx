@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Package, Plus, Edit2, Trash2, Star, StarOff, X, Upload, Loader2, MessageSquarePlus, Download, ImageIcon } from "lucide-react";
 import { apiService } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
@@ -36,6 +37,13 @@ interface Product {
     name: string;
     slug?: string;
   } | string;
+  productType?: string;
+  bundle?: {
+    size?: number;
+    price?: number;
+    allowedProducts?: string[];
+    allowDuplicates?: boolean;
+  };
   variants?: Array<{
     _id?: string;
     name: string;
@@ -87,6 +95,7 @@ interface ProductFormState {
   is_featured: boolean;
   selling_points: string;
   shipping_information: string;
+  productType: "product" | "bundle";
 }
 
 export const ProductsManagement = () => {
@@ -113,11 +122,19 @@ export const ProductsManagement = () => {
     is_featured: false,
     selling_points: "",
     shipping_information: "",
+    productType: "product",
   });
   
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [newImageUrl, setNewImageUrl] = useState("");
   const [variants, setVariants] = useState<ProductVariant[]>([]);
+  const [bundleConfig, setBundleConfig] = useState({
+    size: "",
+    price: "",
+    allowDuplicates: true,
+    allowedProducts: [] as string[],
+  });
+  const [bundleSearch, setBundleSearch] = useState("");
   const [uploading, setUploading] = useState(false);
   const [savingReview, setSavingReview] = useState(false);
   const [reviewForm, setReviewForm] = useState({
@@ -142,6 +159,24 @@ export const ProductsManagement = () => {
       })
     : products;
 
+  const selectableProducts = products.filter((product) => {
+    const isBundle = product.productType === "bundle";
+    const isSelf = editingProduct ? product._id === editingProduct._id : false;
+    return !isBundle && !isSelf;
+  });
+
+  const filteredBundleProducts = bundleSearch.trim()
+    ? selectableProducts.filter((product) => {
+        const query = bundleSearch.trim().toLowerCase();
+        const categoryName = typeof product.category === 'object' ? product.category?.name ?? "" : "";
+        return (
+          product.name.toLowerCase().includes(query) ||
+          categoryName.toLowerCase().includes(query) ||
+          product._id.toLowerCase().includes(query)
+        );
+      })
+    : selectableProducts;
+
   useEffect(() => {
     fetchProducts();
     fetchCategories();
@@ -156,7 +191,7 @@ export const ProductsManagement = () => {
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const response = await apiService.getAllProducts();
+      const response = await apiService.getAllProducts({ page: 1, limit: 100 });
       console.log('Products response:', response);
       if (!response.success || !response.data) {
         throw new Error(response.message || "Failed to fetch products");
@@ -206,6 +241,7 @@ export const ProductsManagement = () => {
       const normalizedPercent = Number.isFinite(percentValue) ? Math.max(percentValue, 0) : 0;
       const normalizedAmount = Number.isFinite(amountValue) ? Math.max(amountValue, 0) : 0;
       const selectedDiscountType = formData.discountType;
+      const isBundle = formData.productType === "bundle";
 
       if (selectedDiscountType === "amount" && !supportsDiscountType) {
         toast({
@@ -216,13 +252,42 @@ export const ProductsManagement = () => {
         return;
       }
 
-      if (variants.length === 0) {
+      if (!isBundle && variants.length === 0) {
         toast({
           title: "Variants required",
           description: "Please add at least one size with a price before saving.",
           variant: "destructive"
         });
         return;
+      }
+
+      if (isBundle) {
+        const bundleSize = Number(bundleConfig.size);
+        const bundlePrice = Number(bundleConfig.price);
+        if (!Number.isFinite(bundleSize) || bundleSize <= 0) {
+          toast({
+            title: "Bundle size required",
+            description: "Enter how many items the bundle contains.",
+            variant: "destructive"
+          });
+          return;
+        }
+        if (!Number.isFinite(bundlePrice) || bundlePrice <= 0) {
+          toast({
+            title: "Bundle price required",
+            description: "Enter the bundle price.",
+            variant: "destructive"
+          });
+          return;
+        }
+        if (bundleConfig.allowedProducts.length === 0) {
+          toast({
+            title: "Select allowed products",
+            description: "Choose at least one product for this bundle.",
+            variant: "destructive"
+          });
+          return;
+        }
       }
 
       // Validate category is selected
@@ -239,6 +304,7 @@ export const ProductsManagement = () => {
         .map((variant) => Number(variant.price))
         .filter((price) => Number.isFinite(price));
       const derivedPrice = variantPrices.length > 0 ? Math.min(...variantPrices) : 0;
+      const bundlePrice = Number(bundleConfig.price);
 
       const parsedSellingPoints = Array.from(new Set(
         formData.selling_points
@@ -246,19 +312,35 @@ export const ProductsManagement = () => {
           .map(point => point.trim())
           .filter(Boolean)
       ));
+      const resolvedImages = imageUrls.length > 0 ? imageUrls : [formData.image_url].filter(Boolean);
 
       const productData: Record<string, any> = {
         name: formData.title,
         description: formData.description,
-        price: Number.isFinite(derivedPrice) ? derivedPrice : 0,
-        stock: Number.isFinite(stockValue) ? stockValue : 0,
+        price: isBundle && Number.isFinite(bundlePrice) ? bundlePrice : (Number.isFinite(derivedPrice) ? derivedPrice : 0),
+        stock: isBundle ? 0 : (Number.isFinite(stockValue) ? stockValue : 0),
         category: formData.category_id.trim(),
-        image_url: imageUrls[0] || formData.image_url,
-        image_urls: imageUrls.length > 0 ? imageUrls : [formData.image_url].filter(Boolean),
+        image_url: resolvedImages[0],
+        image_urls: resolvedImages,
+        images: resolvedImages.map((url, index) => ({
+          url,
+          alt: formData.title || "Product image",
+          isPrimary: index === 0
+        })),
         is_featured: formData.is_featured !== undefined ? formData.is_featured : false,
         selling_points: parsedSellingPoints.length > 0 ? parsedSellingPoints : undefined,
         shipping_information: formData.shipping_information.trim() || undefined,
       };
+
+      if (isBundle) {
+        productData.productType = "bundle";
+        productData.bundle = {
+          size: Number(bundleConfig.size),
+          price: Number(bundleConfig.price),
+          allowedProducts: bundleConfig.allowedProducts,
+          allowDuplicates: bundleConfig.allowDuplicates,
+        };
+      }
 
       // Always include discount fields to match API structure
       if (supportsDiscountType) {
@@ -295,7 +377,7 @@ export const ProductsManagement = () => {
       }
 
       // Handle variants if any
-      if (variants.length > 0 && productId) {
+      if (!isBundle && variants.length > 0 && productId) {
         // Delete existing variants if editing
         if (editingProduct) {
           // Get existing variants and delete them one by one
@@ -314,6 +396,15 @@ export const ProductsManagement = () => {
             price: variant.price,
             stock: variant.stock_quantity
           });
+        }
+      }
+
+      if (isBundle && editingProduct && productId) {
+        const existingVariants = await apiService.getProductVariants(productId);
+        if (existingVariants.success && existingVariants.data) {
+          for (const variant of existingVariants.data) {
+            await apiService.deleteProductVariant(productId, variant._id);
+          }
         }
       }
 
@@ -388,6 +479,7 @@ export const ProductsManagement = () => {
 
   const openEditDialog = async (product: Product) => {
     setEditingProduct(product);
+    const isBundle = product.productType === "bundle";
     const derivedType: DiscountFormType =
       supportsDiscountType && (product.discount_type === "amount" || (!product.discount_type && (Number(product.discount_amount) || 0) > 0))
         ? "amount"
@@ -416,40 +508,62 @@ export const ProductsManagement = () => {
       is_featured: product.isFeatured || product.is_featured || false,
       selling_points: (product.selling_points || []).join('\n'),
       shipping_information: product.shipping_information || "",
+      productType: isBundle ? "bundle" : "product",
     });
+
+    if (isBundle) {
+      setBundleConfig({
+        size: product.bundle?.size?.toString() || "",
+        price: product.bundle?.price?.toString() || product.price?.toString() || "",
+        allowDuplicates: product.bundle?.allowDuplicates ?? true,
+        allowedProducts: product.bundle?.allowedProducts || [],
+      });
+    } else {
+      setBundleConfig({
+        size: "",
+        price: "",
+        allowDuplicates: true,
+        allowedProducts: [],
+      });
+    }
+    setBundleSearch("");
     
     // Load existing images
     setImageUrls(getImages());
     
-    // Use variants from product if available, otherwise fetch
-    if (product.variants && product.variants.length > 0) {
-      // Map variants from product object
-      const mappedVariants = product.variants.map((v: any) => ({
-        _id: v._id,
-        size: v.name || v.size,
-        price: v.price,
-        stock_quantity: v.stock || v.stock_quantity || 0
-      }));
-      setVariants(mappedVariants);
-    } else {
-      // Fetch existing variants if not in product object
-      try {
-        const response = await apiService.getProductVariants(product._id);
-        
-        if (response.success && response.data) {
-          // Map backend variant structure to frontend structure
-          const mappedVariants = response.data.map((v: any) => ({
-            _id: v._id,
-            size: v.name || v.size,
-            price: v.price,
-            stock_quantity: v.stock || v.stock_quantity || 0
-          }));
-          setVariants(mappedVariants);
+    if (!isBundle) {
+      // Use variants from product if available, otherwise fetch
+      if (product.variants && product.variants.length > 0) {
+        // Map variants from product object
+        const mappedVariants = product.variants.map((v: any) => ({
+          _id: v._id,
+          size: v.name || v.size,
+          price: v.price,
+          stock_quantity: v.stock || v.stock_quantity || 0
+        }));
+        setVariants(mappedVariants);
+      } else {
+        // Fetch existing variants if not in product object
+        try {
+          const response = await apiService.getProductVariants(product._id);
+          
+          if (response.success && response.data) {
+            // Map backend variant structure to frontend structure
+            const mappedVariants = response.data.map((v: any) => ({
+              _id: v._id,
+              size: v.name || v.size,
+              price: v.price,
+              stock_quantity: v.stock || v.stock_quantity || 0
+            }));
+            setVariants(mappedVariants);
+          }
+        } catch (error) {
+          console.error('Error loading variants:', error);
+          setVariants([]);
         }
-      } catch (error) {
-        console.error('Error loading variants:', error);
-        setVariants([]);
       }
+    } else {
+      setVariants([]);
     }
     
     setDialogOpen(true);
@@ -535,10 +649,18 @@ export const ProductsManagement = () => {
       is_featured: false,
       selling_points: "",
       shipping_information: "",
+      productType: "product",
     });
     setImageUrls([]);
     setNewImageUrl("");
     setVariants([]);
+    setBundleConfig({
+      size: "",
+      price: "",
+      allowDuplicates: true,
+      allowedProducts: [],
+    });
+    setBundleSearch("");
   };
 
   const addImageUrl = () => {
@@ -550,6 +672,19 @@ export const ProductsManagement = () => {
 
   const removeImageUrl = (index: number) => {
     setImageUrls(imageUrls.filter((_, i) => i !== index));
+  };
+
+  const toggleAllowedProduct = (productId: string, checked: boolean) => {
+    setBundleConfig((prev) => {
+      const exists = prev.allowedProducts.includes(productId);
+      if (checked && !exists) {
+        return { ...prev, allowedProducts: [...prev.allowedProducts, productId] };
+      }
+      if (!checked && exists) {
+        return { ...prev, allowedProducts: prev.allowedProducts.filter((id) => id !== productId) };
+      }
+      return prev;
+    });
   };
 
   const handleFileUpload = async (files: FileList | null) => {
@@ -696,6 +831,39 @@ export const ProductsManagement = () => {
                     </SelectContent>
                   </Select>
                 </div>
+
+                <div className="space-y-3">
+                  <Label>Product Type</Label>
+                  <RadioGroup
+                    className="flex flex-col gap-2 sm:flex-row"
+                    value={formData.productType}
+                    onValueChange={(value) => {
+                      const nextType = value as "product" | "bundle";
+                      setFormData((prev) => ({
+                        ...prev,
+                        productType: nextType,
+                        stock_quantity: nextType === "bundle" ? "0" : prev.stock_quantity,
+                      }));
+                      if (nextType === "bundle") {
+                        setVariants([]);
+                      }
+                    }}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="product" id="product-type-product" />
+                      <Label htmlFor="product-type-product" className="font-normal">
+                        Regular Product
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="bundle" id="product-type-bundle" />
+                      <Label htmlFor="product-type-bundle" className="font-normal">
+                        Bundle
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="stock">Stock Quantity</Label>
                   <Input
@@ -704,6 +872,7 @@ export const ProductsManagement = () => {
                     value={formData.stock_quantity}
                     onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
                     placeholder="0"
+                    disabled={formData.productType === "bundle"}
                   />
                 </div>
                 
@@ -843,11 +1012,107 @@ export const ProductsManagement = () => {
                 )}
               </div>
 
+              {formData.productType === "bundle" && (
+                <div className="space-y-4 rounded-lg border p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h4 className="text-base font-semibold">Bundle Configuration</h4>
+                      <p className="text-sm text-muted-foreground">Define the bundle size and allowed products.</p>
+                    </div>
+                    <Badge variant="outline">Selected {bundleConfig.allowedProducts.length}</Badge>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="bundle-size">Bundle Size</Label>
+                      <Input
+                        id="bundle-size"
+                        type="number"
+                        value={bundleConfig.size}
+                        onChange={(event) => setBundleConfig((prev) => ({ ...prev, size: event.target.value }))}
+                        placeholder="10"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="bundle-price">Bundle Price</Label>
+                      <Input
+                        id="bundle-price"
+                        type="number"
+                        value={bundleConfig.price}
+                        onChange={(event) => setBundleConfig((prev) => ({ ...prev, price: event.target.value }))}
+                        placeholder="50"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between rounded-lg border p-3">
+                      <div>
+                        <p className="text-sm font-medium">Allow Duplicates</p>
+                        <p className="text-xs text-muted-foreground">Same product can repeat.</p>
+                      </div>
+                      <Switch
+                        checked={bundleConfig.allowDuplicates}
+                        onCheckedChange={(checked) => setBundleConfig((prev) => ({ ...prev, allowDuplicates: checked }))}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label>Allowed Products</Label>
+                      <span className="text-xs text-muted-foreground">{bundleConfig.allowedProducts.length} selected</span>
+                    </div>
+                    <Input
+                      value={bundleSearch}
+                      onChange={(event) => setBundleSearch(event.target.value)}
+                      placeholder="Search products by name, category, or ID"
+                    />
+                    <div className="max-h-64 space-y-2 overflow-y-auto rounded-lg border p-3">
+                      {filteredBundleProducts.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No products match your search.</p>
+                      ) : (
+                        filteredBundleProducts.map((product) => {
+                          const categoryName = typeof product.category === "object" ? product.category?.name ?? "" : "";
+                          const isChecked = bundleConfig.allowedProducts.includes(product._id);
+                          return (
+                            <label
+                              key={product._id}
+                              className="flex items-center justify-between rounded-md border border-transparent p-2 transition hover:border-muted/50"
+                            >
+                              <div className="flex items-center gap-3">
+                                <Checkbox
+                                  checked={isChecked}
+                                  onCheckedChange={(checked) => toggleAllowedProduct(product._id, Boolean(checked))}
+                                />
+                                <div>
+                                  <p className="text-sm font-medium">{product.name}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {categoryName ? `${categoryName} • ` : ""}{product._id}
+                                  </p>
+                                </div>
+                              </div>
+                              <Badge variant="outline" className="text-xs">
+                                £{Number(product.price ?? 0).toFixed(2)}
+                              </Badge>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Product Variants Section */}
-              <ProductVariantsManagement
-                variants={variants}
-                onChange={setVariants}
-              />
+              {formData.productType !== "bundle" && (
+                <ProductVariantsManagement
+                  variants={variants}
+                  onChange={setVariants}
+                />
+              )}
+              {formData.productType === "bundle" && (
+                <p className="text-sm text-muted-foreground">
+                  Bundle products do not require size variants.
+                </p>
+              )}
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -1045,6 +1310,11 @@ export const ProductsManagement = () => {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center flex-wrap gap-2 mb-1">
                           <h3 className="font-semibold truncate">{product.name}</h3>
+                          {product.productType === "bundle" && (
+                            <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
+                              Bundle
+                            </Badge>
+                          )}
                           {isFeatured && (
                             <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
                               <Star className="h-3 w-3 mr-1" />

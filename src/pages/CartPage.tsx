@@ -59,7 +59,7 @@ export const CartPage = () => {
 
   const subtotal = getTotal();
   const threshold = shippingSettings?.free_delivery_threshold ?? null;
-  const isFreeShipping = typeof threshold === 'number' && !Number.isNaN(threshold) && subtotal >= threshold;
+  const isFreeShipping = typeof threshold === 'number' && !Number.isNaN(threshold) && threshold > 0 && subtotal >= threshold;
   const shippingCharge = isFreeShipping ? 0 : (shippingSettings?.delivery_charges || 200);
   const finalTotal = subtotal + shippingCharge;
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
@@ -137,9 +137,23 @@ export const CartPage = () => {
                               {item.product.name}
                             </Link>
                           </h3>
+                          {(item.productType === "bundle" || item.bundleItems?.length) && (
+                            <Badge variant="secondary" className="text-xs bg-emerald-100 text-emerald-700">Bundle</Badge>
+                          )}
                           {item.variant_size && (
                             <div className="mt-1">
                               <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">{item.variant_size}</Badge>
+                            </div>
+                          )}
+                          {item.bundleItems && item.bundleItems.length > 0 && (
+                            <div className="mt-2 space-y-1 text-xs text-gray-600">
+                              {item.bundleItems.map((bundleItem, index) => (
+                                <div key={`${bundleItem.productId}-${index}`} className="flex flex-wrap items-center gap-1">
+                                  <span className="font-medium">{bundleItem.product?.name || "Item"}</span>
+                                  {bundleItem.variant_size && <span>({bundleItem.variant_size})</span>}
+                                  <span>× {bundleItem.quantity}</span>
+                                </div>
+                              ))}
                             </div>
                           )}
                           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -255,8 +269,20 @@ export const CartPage = () => {
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-gray-900">{item.product.name}</p>
+                              {(item.productType === "bundle" || item.bundleItems?.length) && (
+                                <p className="text-xs text-emerald-700">Bundle</p>
+                              )}
                               {item.variant_size && (
                                 <p className="text-xs text-gray-500">{item.variant_size}</p>
+                              )}
+                              {item.bundleItems && item.bundleItems.length > 0 && (
+                                <div className="mt-1 space-y-1 text-[11px] text-gray-500">
+                                  {item.bundleItems.map((bundleItem, index) => (
+                                    <div key={`${bundleItem.productId}-${index}`}>
+                                      {bundleItem.product?.name || "Item"}{bundleItem.variant_size ? ` (${bundleItem.variant_size})` : ""} × {bundleItem.quantity}
+                                    </div>
+                                  ))}
+                                </div>
                               )}
                             </div>
                             <div className="text-right">

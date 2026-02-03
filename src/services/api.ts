@@ -37,11 +37,12 @@ class ApiService {
       ...options,
     };
 
-    // Add auth token if available
-    if (this.token) {
+    const token = this.token ?? localStorage.getItem('jwt_token');
+    if (token) {
+      this.token = token;
       config.headers = {
         ...config.headers,
-        'Authorization': `Bearer ${this.token}`,
+        'Authorization': `Bearer ${token}`,
       };
     }
 
@@ -334,6 +335,7 @@ class ApiService {
     category?: string | null;
     image_url?: string;
     image_urls?: string[];
+    images?: Array<{ url: string; alt?: string; isPrimary?: boolean }>;
     is_featured?: boolean;
     selling_points?: string[] | null;
     shipping_information?: string | null;
@@ -341,6 +343,13 @@ class ApiService {
     discount_type?: 'percentage' | 'amount';
     discount_amount?: number;
     tags?: string[];
+    productType?: 'bundle' | string;
+    bundle?: {
+      size: number;
+      price: number;
+      allowedProducts: string[];
+      allowDuplicates?: boolean;
+    };
   }, imageFiles?: File[]) {
     // Category is required - must be a valid ObjectId
     if (!productData.category || (typeof productData.category === 'string' && productData.category.trim() === '')) {
@@ -373,6 +382,10 @@ class ApiService {
       jsonBody.image_urls = [productData.image_url];
     }
 
+    if (productData.images && productData.images.length > 0) {
+      jsonBody.images = productData.images;
+    }
+
     // Add selling_points array if provided
     if (productData.selling_points && productData.selling_points.length > 0) {
       jsonBody.selling_points = productData.selling_points;
@@ -386,6 +399,14 @@ class ApiService {
     // Add tags if provided
     if (productData.tags && productData.tags.length > 0) {
       jsonBody.tags = productData.tags;
+    }
+
+    if (productData.productType) {
+      jsonBody.productType = productData.productType;
+    }
+
+    if (productData.bundle) {
+      jsonBody.bundle = productData.bundle;
     }
 
     // Use the standard request method which sends JSON
@@ -403,6 +424,7 @@ class ApiService {
     category?: string | null;
     image_url?: string;
     image_urls?: string[];
+    images?: Array<{ url: string; alt?: string; isPrimary?: boolean }>;
     is_featured?: boolean;
     selling_points?: string[] | null;
     shipping_information?: string | null;
@@ -410,6 +432,13 @@ class ApiService {
     discount_type?: 'percentage' | 'amount';
     discount_amount?: number;
     tags?: string[];
+    productType?: 'bundle' | string;
+    bundle?: {
+      size: number;
+      price: number;
+      allowedProducts: string[];
+      allowDuplicates?: boolean;
+    };
   }) {
     return this.request(`/api/products/${productId}`, {
       method: 'PUT',
@@ -429,10 +458,12 @@ class ApiService {
     items: Array<{
       product: string;
       quantity: number;
-      variant?: {
-        name: string;
-        price: number;
-      };
+      variantId?: string;
+      bundleItems?: Array<{
+        product: string;
+        quantity: number;
+        variantId?: string;
+      }>;
     }>;
     shippingAddress: {
       name: string;
@@ -446,6 +477,7 @@ class ApiService {
     };
     paymentMethod: string;
     notes?: string;
+    couponCode?: string;
   }) {
     return this.request('/api/orders', {
       method: 'POST',
@@ -455,12 +487,33 @@ class ApiService {
 
   async createPaymentIntent(data: {
     orderId: string;
+    orderNumber?: string;
+    email?: string;
+    amount?: number;
     currency: string;
   }) {
     return this.request('/api/payments/create-intent', {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  async getPaymentStatus(params: {
+    paymentIntentId?: string;
+    orderId?: string;
+    orderNumber?: string;
+  }) {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) {
+        searchParams.append(key, value.toString());
+      }
+    });
+
+    const queryString = searchParams.toString();
+    const endpoint = queryString ? `/api/payments/status?${queryString}` : '/api/payments/status';
+
+    return this.request(endpoint);
   }
 
   async getUserOrders(params: { page?: number; limit?: number } = {}) {
@@ -866,14 +919,38 @@ class ApiService {
   }
 
   // Admin announcement methods
+  async getAdminAnnouncements(params: { page?: number; limit?: number } = {}) {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        searchParams.append(key, value.toString());
+      }
+    });
+
+    const queryString = searchParams.toString();
+    const endpoint = queryString
+      ? `/api/announcements/admin/all?${queryString}`
+      : '/api/announcements/admin/all';
+
+    return this.request(endpoint);
+  }
+
   async createAnnouncement(data: {
+    title: string;
     message: string;
-    is_active: boolean;
-    bg_color: string;
-    text_color: string;
-    font_size: number;
-    link_url?: string | null;
-    show_in_header: boolean;
+    type?: string;
+    priority?: string;
+    isActive?: boolean;
+    targetAudience?: string;
+    targetUsers?: string[];
+    isDismissible?: boolean;
+    showOnHomepage?: boolean;
+    showInHeader?: boolean;
+    startDate?: string | null;
+    bgColor?: string;
+    textColor?: string;
+    fontSize?: number;
+    linkUrl?: string | null;
   }) {
     return this.request('/api/announcements/admin', {
       method: 'POST',
@@ -882,16 +959,82 @@ class ApiService {
   }
 
   async updateAnnouncement(announcementId: string, data: {
-    message: string;
-    is_active: boolean;
-    bg_color: string;
-    text_color: string;
-    font_size: number;
-    link_url?: string | null;
-    show_in_header: boolean;
+    title?: string;
+    message?: string;
+    type?: string;
+    priority?: string;
+    isActive?: boolean;
+    targetAudience?: string;
+    targetUsers?: string[];
+    isDismissible?: boolean;
+    showOnHomepage?: boolean;
+    showInHeader?: boolean;
+    startDate?: string | null;
+    bgColor?: string;
+    textColor?: string;
+    fontSize?: number;
+    linkUrl?: string | null;
   }) {
     return this.request(`/api/announcements/admin/${announcementId}`, {
       method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Coupon methods (admin)
+  async getCoupons(params: { page?: number; limit?: number } = {}) {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        searchParams.append(key, value.toString());
+      }
+    });
+
+    const queryString = searchParams.toString();
+    const endpoint = queryString ? `/api/coupons?${queryString}` : '/api/coupons';
+    return this.request(endpoint);
+  }
+
+  async createCoupon(data: {
+    code: string;
+    name: string;
+    type: 'percentage' | 'fixed';
+    value: number;
+    minOrderAmount?: number;
+    maxDiscount?: number;
+    appliesTo?: 'subtotal' | 'total';
+    isActive?: boolean;
+  }) {
+    return this.request('/api/coupons', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateCoupon(couponId: string, data: {
+    name?: string;
+    type?: 'percentage' | 'fixed';
+    value?: number;
+    minOrderAmount?: number;
+    maxDiscount?: number;
+    appliesTo?: 'subtotal' | 'total';
+    isActive?: boolean;
+  }) {
+    return this.request(`/api/coupons/${couponId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteCoupon(couponId: string) {
+    return this.request(`/api/coupons/${couponId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async validateCoupon(data: { code: string; subtotal: number }) {
+    return this.request('/api/coupons/validate', {
+      method: 'POST',
       body: JSON.stringify(data),
     });
   }
@@ -926,6 +1069,7 @@ class ApiService {
     page?: number;
     limit?: number;
     status?: string;
+    grouped?: boolean;
   } = {}) {
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -944,6 +1088,12 @@ class ApiService {
     return this.request(`/api/orders/${orderId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status, notes }),
+    });
+  }
+
+  async deleteOrderAdmin(orderId: string) {
+    return this.request(`/api/orders/admin/${orderId}`, {
+      method: 'DELETE',
     });
   }
 

@@ -23,14 +23,14 @@ import { CategoriesManagement } from "./components/admin/CategoriesManagement";
 import { OrdersManagement } from "./components/admin/OrdersManagement";
 import { CarouselManagement } from "./components/admin/CarouselManagement";
 import { FeaturedProductsManagement } from "./components/admin/FeaturedProductsManagement";
-import { ShippingManagement } from "./components/admin/ShippingManagement";
 import { HomepageCategoriesManagement } from "./components/admin/HomepageCategoriesManagement";
 import { ContactQueriesManagement } from "./components/admin/ContactQueriesManagement";
 import { CorporateOrdersManagement } from "./components/admin/CorporateOrdersManagement";
 import { BlogsManagement } from "./components/admin/BlogsManagement";
 import { ReviewsManagement } from "./components/admin/ReviewsManagement";
 import { AnnouncementBarManagement } from "./components/admin/AnnouncementBarManagement";
-import { PaymentOptionsManagement } from "./components/admin/PaymentOptionsManagement";
+import { CouponsManagement } from "./components/admin/CouponsManagement";
+import { DeliveryChargesManagement } from "./components/admin/DeliveryChargesManagement";
 import TermsOfService from "./pages/TermsOfService";
 import RefundPolicy from "./pages/RefundPolicy";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
@@ -38,6 +38,7 @@ import ContactUs from "./pages/ContactUs";
 import CorporateOrder from "./pages/CorporateOrder";
 import BlogsPage from "./pages/BlogsPage";
 import BlogDetailPage from "./pages/BlogDetailPage";
+import WhyPhresh from "./pages/WhyPhresh";
 
 const queryClient = new QueryClient();
 
@@ -90,6 +91,7 @@ const AppRoutes = () => {
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />
           <Route path="/contact" element={<ContactUs />} />
           <Route path="/corporate-order" element={<CorporateOrder />} />
+          <Route path="/why-phresh" element={<WhyPhresh />} />
           
           {/* Admin Dashboard with nested routes */}
           <Route path="/admin-dashboard" element={<AdminLayout />}>
@@ -100,10 +102,10 @@ const AppRoutes = () => {
             <Route path="homepage-categories" element={<HomepageCategoriesManagement />} />
             <Route path="carousel" element={<CarouselManagement />} />
             <Route path="featured" element={<FeaturedProductsManagement />} />
-            <Route path="shipping" element={<ShippingManagement />} />
             <Route path="announcement" element={<AnnouncementBarManagement />} />
+            <Route path="coupons" element={<CouponsManagement />} />
+            <Route path="delivery-charges" element={<DeliveryChargesManagement />} />
             <Route path="reviews" element={<ReviewsManagement />} />
-            <Route path="payment-options" element={<PaymentOptionsManagement />} />
             <Route path="contact-queries" element={<ContactQueriesManagement />} />
             <Route path="corporate-orders" element={<CorporateOrdersManagement />} />
             <Route path="blogs" element={<BlogsManagement />} />

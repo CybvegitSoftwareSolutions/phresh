@@ -27,8 +27,9 @@ export const Header = () => {
   const navItems = useMemo<NavItem[]>(() => {
     const base = [
       { label: "Home", to: "/" },
-      { label: "Shop", to: "/products" },
-      { label: "Corporate Order", to: "/corporate-order" },
+      { label: "Juices", to: "/products" },
+      { label: "Why Phresh?", to: "/why-phresh" },
+      { label: "Corporate & Events", to: "/corporate-order" },
       { label: "Contact Us", to: "/contact" },
     ];
 
@@ -84,23 +85,11 @@ export const Header = () => {
                     <SheetTitle>Menu</SheetTitle>
                   </SheetHeader>
                   <div className="mt-4 space-y-2">
-                    <Link to="/" className="block py-2 text-sm">
-                      Home
-                    </Link>
-                    <Link to="/products" className="block py-2 text-sm">
-                      Shop
-                    </Link>
-                    <Link to="/corporate-order" className="block py-2 text-sm">
-                      Corporate Order
-                    </Link>
-                    <Link to="/contact" className="block py-2 text-sm">
-                      Contact Us
-                    </Link>
-                    {user && isAdmin && (
-                      <Link to="/admin-dashboard" className="block py-2 text-sm">
-                        Admin
+                    {navItems.map((item) => (
+                      <Link key={item.to} to={item.to} className="block py-2 text-sm">
+                        {item.label}
                       </Link>
-                    )}
+                    ))}
                   </div>
                 </SheetContent>
               </Sheet>

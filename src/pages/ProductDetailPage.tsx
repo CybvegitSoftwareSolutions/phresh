@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 import { Star, ArrowLeft, ShoppingCart, Gift, RefreshCcw, Package, CheckCircle2 } from "lucide-react";
 import { apiService } from "@/services/api";
 import { useCart } from "@/hooks/useCart";
@@ -15,6 +16,7 @@ import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { Textarea } from "@/components/ui/textarea";
 import { computeDiscountedPrice } from "@/utils/pricing";
+import { cn } from "@/lib/utils";
 
 interface Product {
   _id: string;
@@ -43,6 +45,13 @@ interface Product {
   }>;
   selling_points?: string[] | null;
   shipping_information?: string | null;
+  productType?: string;
+  bundle?: {
+    size?: number | null;
+    price?: number | null;
+    allowedProducts?: any[];
+    allowDuplicates?: boolean;
+  };
 }
 
 interface ProductVariant {
@@ -50,6 +59,23 @@ interface ProductVariant {
   size: string;
   price: number;
   stock_quantity: number;
+}
+
+interface BundleAllowedProduct {
+  id: string;
+  name: string;
+  image_url?: string | null;
+  image_urls?: string[] | null;
+  variants?: ProductVariant[];
+}
+
+interface BundleSelection {
+  productId: string;
+  quantity: number;
+  variantId?: string;
+  variantName?: string;
+  variantPrice?: number;
+  product?: BundleAllowedProduct;
 }
 
 interface Review {
@@ -66,7 +92,7 @@ interface Review {
 const ProductDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { addToCart } = useCart();
+  const { addToCart, items, updateQuantity, removeFromCart } = useCart();
   const { user } = useAuth();
   const [product, setProduct] = useState<Product | null>(null);
   const [variants, setVariants] = useState<ProductVariant[]>([]);
@@ -83,6 +109,115 @@ const ProductDetailPage = () => {
   const [questionEmail, setQuestionEmail] = useState("");
   const [questionMessage, setQuestionMessage] = useState("");
   const [submittingQuestion, setSubmittingQuestion] = useState(false);
+  const [bundleAllowedProducts, setBundleAllowedProducts] = useState<BundleAllowedProduct[]>([]);
+  const [bundleSelections, setBundleSelections] = useState<Record<string, BundleSelection>>({});
+  const [bundleLoading, setBundleLoading] = useState(false);
+
+  const getCartItemsForProduct = (productId: string) => {
+    return items.filter(item => item.productId === productId);
+  };
+
+  const getCartQuantityForProduct = (productId: string) => {
+    return getCartItemsForProduct(productId).reduce((total, item) => total + item.quantity, 0);
+  };
+
+  const getCartQuantityForVariant = (productId: string, variantId?: string | null, variantName?: string | null) => {
+    if (!variantId && !variantName) return 0;
+    return items
+      .filter(item =>
+        item.productId === productId &&
+        (item.variant_id === variantId || (!item.variant_id && variantName && item.variant_size === variantName))
+      )
+      .reduce((total, item) => total + item.quantity, 0);
+  };
+
+  const getCartItemForVariant = (productId: string, variantId?: string | null, variantName?: string | null) => {
+    const cartItems = getCartItemsForProduct(productId);
+    if (cartItems.length === 0) return null;
+    if (variantId || variantName) {
+      return (
+        cartItems.find(
+          item =>
+            item.variant_id === variantId ||
+            (!item.variant_id && variantName && item.variant_size === variantName)
+        ) ?? null
+      );
+    }
+    return cartItems[0];
+  };
+
+  const extractPrimaryProduct = (raw: any) => {
+    if (!raw) return null;
+    let productsData = raw;
+    if (raw?.data?.data && Array.isArray(raw.data.data)) {
+      productsData = raw.data.data;
+    } else if (raw?.data && Array.isArray(raw.data)) {
+      productsData = raw.data;
+    } else if (raw?.data && !Array.isArray(raw.data)) {
+      productsData = raw.data;
+    } else if (Array.isArray(raw)) {
+      productsData = raw;
+    }
+    return Array.isArray(productsData) ? productsData[0] : productsData;
+  };
+
+  const normalizeAllowedProduct = (raw: any): BundleAllowedProduct | null => {
+    if (!raw) return null;
+    const id = raw._id || raw.id || raw.productId;
+    if (!id) return null;
+    const imageUrls = raw.image_urls || raw.images?.map((img: any) => img.url || img) || (raw.image_url ? [raw.image_url] : []);
+    return {
+      id,
+      name: raw.name || raw.title || "Product",
+      image_url: raw.image_url || raw.images?.[0]?.url || null,
+      image_urls: Array.isArray(imageUrls) ? imageUrls : [],
+      variants: (raw.variants || []).map((variant: any) => ({
+        _id: variant._id || `${id}_${variant.name}`,
+        size: variant.name || variant.size,
+        price: variant.price,
+        stock_quantity: variant.stock ?? variant.stock_quantity ?? 0,
+      }))
+    };
+  };
+
+  const getBundleTotalCount = (selections: Record<string, BundleSelection>) => {
+    return Object.values(selections).reduce((sum, selection) => sum + (selection.quantity || 0), 0);
+  };
+
+  const handleBundleQuantityChange = (productId: string, delta: number) => {
+    if (!product?.bundle?.size) return;
+    setBundleSelections((prev) => {
+      const currentTotal = getBundleTotalCount(prev);
+      const allowDuplicates = product.bundle?.allowDuplicates ?? true;
+      const current = prev[productId] || { productId, quantity: 0 };
+      const nextQuantity = Math.max(0, (current.quantity || 0) + delta);
+      if (delta > 0 && currentTotal >= product.bundle!.size) {
+        return prev;
+      }
+      if (!allowDuplicates && nextQuantity > 1) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [productId]: {
+          ...current,
+          quantity: nextQuantity
+        }
+      };
+    });
+  };
+
+  const handleBundleVariantChange = (productId: string, variant: ProductVariant) => {
+    setBundleSelections((prev) => ({
+      ...prev,
+      [productId]: {
+        ...(prev[productId] || { productId, quantity: 0 }),
+        variantId: variant._id ?? variant.size,
+        variantName: variant.size,
+        variantPrice: variant.price
+      }
+    }));
+  };
 
   useEffect(() => {
     const fetchProductData = async () => {
@@ -167,6 +302,49 @@ const ProductDetailPage = () => {
         setProduct(updatedProduct);
         setVariants(mappedVariants);
         setReviews(reviewsResponse.data || []);
+
+        if (updatedProduct.productType === "bundle") {
+          setBundleLoading(true);
+          try {
+            const allowed = updatedProduct.bundle?.allowedProducts ?? [];
+            const resolved = await Promise.all(
+              allowed.map(async (entry: any) => {
+                if (typeof entry === "string") {
+                  const response = await apiService.getProduct(entry);
+                  if (response?.success && response.data) {
+                    const primary = extractPrimaryProduct(response.data);
+                    return normalizeAllowedProduct(primary);
+                  }
+                  return null;
+                }
+                return normalizeAllowedProduct(entry);
+              })
+            );
+            const normalized = resolved.filter(Boolean) as BundleAllowedProduct[];
+            setBundleAllowedProducts(normalized);
+
+            const initialSelections: Record<string, BundleSelection> = {};
+            normalized.forEach((allowedProduct) => {
+              const defaultVariant = allowedProduct.variants?.[0];
+              initialSelections[allowedProduct.id] = {
+                productId: allowedProduct.id,
+                quantity: 0,
+                variantId: defaultVariant?._id ?? defaultVariant?.size,
+                variantName: defaultVariant?.size,
+                variantPrice: defaultVariant?.price,
+                product: allowedProduct
+              };
+            });
+            setBundleSelections(initialSelections);
+          } catch (error) {
+            console.error("Failed to load bundle items", error);
+          } finally {
+            setBundleLoading(false);
+          }
+        } else {
+          setBundleAllowedProducts([]);
+          setBundleSelections({});
+        }
         
         if (reviewsResponse.data && reviewsResponse.data.length > 0 && user) {
           const mine = reviewsResponse.data.find((r: any) => r.user_id === user.id);
@@ -205,7 +383,9 @@ const ProductDetailPage = () => {
     if (!product) return false;
 
     try {
-      const opts = selectedVariant ? { variantSize: selectedVariant.size, variantPrice: selectedVariant.price } : undefined;
+      const opts = selectedVariant
+        ? { variantId: selectedVariant._id, variantSize: selectedVariant.size, variantPrice: selectedVariant.price }
+        : undefined;
       await addToCart(product._id, 1, opts);
       if (showSuccessToast) {
         toast({
@@ -224,12 +404,119 @@ const ProductDetailPage = () => {
     }
   };
 
+  const addBundleToCart = async (showSuccessToast = true) => {
+    if (!product?.bundle?.size) return false;
+    const total = getBundleTotalCount(bundleSelections);
+    if (total !== product.bundle.size) {
+      toast({
+        title: "Bundle incomplete",
+        description: `Please select exactly ${product.bundle.size} items.`,
+        variant: "destructive"
+      });
+      return false;
+    }
+    const bundleItems = Object.values(bundleSelections)
+      .filter((selection) => selection.quantity > 0)
+      .map((selection) => ({
+        productId: selection.productId,
+        quantity: selection.quantity,
+        variantId: selection.variantId,
+        variantSize: selection.variantName,
+        variantPrice: selection.variantPrice,
+        product: selection.product
+          ? {
+              _id: selection.product.id,
+              name: selection.product.name,
+              price: selection.product.variants?.find(v => v._id === selection.variantId)?.price ?? selection.product.variants?.[0]?.price ?? 0,
+              image_url: selection.product.image_url || null,
+              image_urls: selection.product.image_urls || null,
+              images: null
+            }
+          : undefined
+      }));
+
+    await addToCart(product._id, 1, {
+      productType: "bundle",
+      bundleItems
+    });
+
+    if (showSuccessToast) {
+      toast({
+        title: "Added to Cart",
+        description: `${product.name} bundle added to cart`
+      });
+    }
+    return true;
+  };
+
   const handleAddToCart = async () => {
+    if (product?.productType === "bundle") {
+      await addBundleToCart(true);
+      return;
+    }
     await addProductToCart(true);
   };
 
+  const handleIncrementFromDetail = async () => {
+    if (!product) return;
+    if (product.productType === "bundle") {
+      const cartItem = getCartItemForVariant(product._id);
+      if (cartItem) {
+        await updateQuantity(cartItem._id, cartItem.quantity + 1);
+        return;
+      }
+      await addBundleToCart(true);
+      return;
+    }
+    if (variants.length > 0) {
+      if (!selectedVariant) return;
+      const cartItem = getCartItemForVariant(product._id, selectedVariant._id, selectedVariant.size);
+      if (cartItem) {
+        await updateQuantity(cartItem._id, cartItem.quantity + 1);
+        return;
+      }
+      await addToCart(product._id, 1, {
+        variantId: selectedVariant._id,
+        variantSize: selectedVariant.size,
+        variantPrice: selectedVariant.price
+      });
+      return;
+    }
+    const cartItem = getCartItemForVariant(product._id);
+    if (cartItem) {
+      await updateQuantity(cartItem._id, cartItem.quantity + 1);
+      return;
+    }
+    await addToCart(product._id, 1);
+  };
+
+  const handleDecrementFromDetail = async () => {
+    if (!product) return;
+    if (product.productType === "bundle") {
+      const cartItem = getCartItemForVariant(product._id);
+      if (!cartItem) return;
+      if (cartItem.quantity > 1) {
+        await updateQuantity(cartItem._id, cartItem.quantity - 1);
+      } else {
+        await removeFromCart(cartItem._id);
+      }
+      return;
+    }
+    const targetVariantId = selectedVariant?._id ?? null;
+    const targetVariantName = selectedVariant?.size ?? null;
+    const cartItem = getCartItemForVariant(product._id, targetVariantId, targetVariantName);
+    if (!cartItem) return;
+    if (cartItem.quantity > 1) {
+      await updateQuantity(cartItem._id, cartItem.quantity - 1);
+    } else {
+      await removeFromCart(cartItem._id);
+    }
+  };
+
   const handleBuyNow = async () => {
-    const success = await addProductToCart(false);
+    const success = product?.productType === "bundle"
+      ? await addBundleToCart(false)
+      : await addProductToCart(false);
     if (success) {
       navigate('/checkout?buy_now=1');
     }
@@ -317,11 +604,21 @@ const ProductDetailPage = () => {
     );
   }
 
-  const currentPrice = selectedVariant ? selectedVariant.price : product.price;
+  const isBundle = product.productType === "bundle";
+  const currentPrice = isBundle ? product.price : (selectedVariant ? selectedVariant.price : product.price);
   const pricing = computeDiscountedPrice(product, currentPrice);
+  const selectedVariantQuantity = isBundle
+    ? getCartQuantityForProduct(product._id)
+    : selectedVariant
+      ? getCartQuantityForVariant(product._id, selectedVariant._id, selectedVariant.size)
+      : getCartQuantityForProduct(product._id);
   const discountedPrice = pricing.finalPrice;
   const hasDiscount = pricing.hasDiscount;
   const savingsAmount = hasDiscount ? Math.round(pricing.savings) : 0;
+
+  const bundleSize = product.bundle?.size ?? 0;
+  const bundleTotal = getBundleTotalCount(bundleSelections);
+  const bundleReady = isBundle && bundleSize > 0 && bundleTotal === bundleSize;
 
   const formatSize = (size: string) => {
     const s = size?.toString() || "";
@@ -535,31 +832,44 @@ const ProductDetailPage = () => {
                 </ul>
               )}
 
-              {variants.length > 0 && (
+              {!isBundle && variants.length > 0 && (
                 <div className="pt-2">
                   <h3 className="font-semibold mb-3 uppercase tracking-widest text-xs text-muted-foreground">Select Size</h3>
-                  <Select
+                  <RadioGroup
                     value={selectedVariant?._id ?? ""}
                     onValueChange={(value) => {
                       const next = variants.find((variant) => variant._id === value) ?? null;
                       setSelectedVariant(next);
                     }}
+                    className="gap-3"
                   >
-                    <SelectTrigger className="w-full md:w-64">
-                      <SelectValue placeholder="Choose a size" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {variants.map((variant) => {
-                        const label = `${formatSize(variant.size)} - £${variant.price.toFixed(2)}`;
-                        const isDisabled = hasAvailableVariant && variant.stock_quantity === 0;
-                        return (
-                          <SelectItem key={variant._id} value={variant._id} disabled={isDisabled}>
-                            {variant.stock_quantity === 0 ? `${label} (Out of stock)` : label}
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
+                    {variants.map((variant) => {
+                      const label = `${formatSize(variant.size)} - £${variant.price.toFixed(2)}`;
+                      const isDisabled = hasAvailableVariant && variant.stock_quantity === 0;
+                      return (
+                        <div
+                          key={variant._id}
+                          className={cn(
+                            "flex items-center justify-between rounded-lg border px-4 py-3",
+                            isDisabled ? "border-muted bg-muted/40 opacity-70" : "border-border"
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <RadioGroupItem value={variant._id} id={`variant-${variant._id}`} disabled={isDisabled} />
+                            <Label htmlFor={`variant-${variant._id}`} className="flex flex-col text-left">
+                              <span className="text-sm font-medium">{label}</span>
+                              {variant.stock_quantity === 0 && (
+                                <span className="text-xs text-destructive">Out of stock</span>
+                              )}
+                            </Label>
+                          </div>
+                          <span className="text-sm text-muted-foreground">
+                            {variant.stock_quantity > 0 ? "Available" : "Unavailable"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </RadioGroup>
                   {selectedVariant && selectedVariant.stock_quantity === 0 && (
                     <p className="mt-2 text-xs text-destructive">
                       This size is currently out of stock.
@@ -567,29 +877,151 @@ const ProductDetailPage = () => {
                   )}
                 </div>
               )}
+
+              {isBundle && (
+                <div className="pt-2 space-y-4">
+                  <div className="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3 text-sm">
+                    <span className="text-gray-700">Bundle items selected</span>
+                    <span className={cn("font-semibold", bundleReady ? "text-green-700" : "text-gray-900")}>
+                      {bundleTotal}/{bundleSize}
+                    </span>
+                  </div>
+
+                  {bundleLoading ? (
+                    <div className="rounded-lg border border-gray-200 px-4 py-3">
+                      <p className="text-sm text-gray-700">Loading bundle items...</p>
+                    </div>
+                  ) : bundleAllowedProducts.length === 0 ? (
+                    <div className="rounded-lg border border-gray-200 px-4 py-3">
+                      <p className="text-sm text-gray-700">No products available for this bundle.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {bundleAllowedProducts.map((allowedProduct) => {
+                        const selection = bundleSelections[allowedProduct.id];
+                        const quantity = selection?.quantity || 0;
+                        const selectedVariantId =
+                          selection?.variantId || allowedProduct.variants?.[0]?._id || allowedProduct.variants?.[0]?.size;
+                        const allowDuplicates = product.bundle?.allowDuplicates ?? true;
+                        const maxedOut = bundleSize > 0 && bundleTotal >= bundleSize;
+                        const disablePlus = maxedOut || (!allowDuplicates && quantity >= 1);
+                        return (
+                          <div key={allowedProduct.id} className="rounded-lg border border-gray-200 px-4 py-4 space-y-3">
+                            <div className="flex items-center gap-3">
+                              <div className="h-12 w-12 rounded border overflow-hidden bg-muted">
+                                <img
+                                  src={allowedProduct.image_urls?.[0] || allowedProduct.image_url || "/placeholder.svg"}
+                                  alt={allowedProduct.name}
+                                  className="h-full w-full object-cover"
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-sm font-semibold text-gray-900">{allowedProduct.name}</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  className="h-8 w-8 rounded-full"
+                                  onClick={() => handleBundleQuantityChange(allowedProduct.id, -1)}
+                                  disabled={quantity <= 0}
+                                >
+                                  -
+                                </Button>
+                                <span className="min-w-[2rem] text-center text-sm font-semibold">{quantity}</span>
+                                <Button
+                                  size="icon"
+                                  className="h-8 w-8 rounded-full"
+                                  onClick={() => handleBundleQuantityChange(allowedProduct.id, 1)}
+                                  disabled={disablePlus}
+                                >
+                                  +
+                                </Button>
+                              </div>
+                            </div>
+
+                            {(allowedProduct.variants?.length ?? 0) > 0 && (
+                              <div className="space-y-2">
+                                <Label className="text-xs uppercase text-muted-foreground">Select size</Label>
+                                <RadioGroup
+                                  value={selectedVariantId}
+                                  onValueChange={(value) => {
+                                    const variant = allowedProduct.variants?.find((v) => v._id === value || v.size === value);
+                                    if (variant) {
+                                      handleBundleVariantChange(allowedProduct.id, variant);
+                                    }
+                                  }}
+                                  className="flex flex-wrap gap-2"
+                                >
+                                  {allowedProduct.variants?.map((variant) => (
+                                    <div key={variant._id || variant.size} className="flex items-center space-x-2">
+                                      <RadioGroupItem value={variant._id ?? variant.size} id={`${allowedProduct.id}-${variant._id ?? variant.size}`} />
+                                      <Label htmlFor={`${allowedProduct.id}-${variant._id ?? variant.size}`} className="text-sm font-normal">
+                                        {variant.size}
+                                      </Label>
+                                    </div>
+                                  ))}
+                                </RadioGroup>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="space-y-3">
-              <Button
-                size="lg"
-                className="w-full gradient-luxury shadow-luxury"
-                onClick={handleAddToCart}
-                disabled={variants.length > 0 && (!selectedVariant || selectedVariant.stock_quantity === 0)}
-              >
-                <ShoppingCart className="h-5 w-5 mr-2" />
-                Add to Cart
-                {selectedVariant && ` - ${formatSize(selectedVariant.size)}`}
-              </Button>
+              {selectedVariantQuantity > 0 ? (
+                <div className="flex items-center justify-center gap-3">
+                  <Button
+                    size="icon"
+                    className="h-11 w-11 rounded-full"
+                    variant="outline"
+                    onClick={handleDecrementFromDetail}
+                  >
+                    -
+                  </Button>
+                  <span className="text-lg font-semibold min-w-[2.5rem] text-center">{selectedVariantQuantity}</span>
+                  <Button
+                    size="icon"
+                    className="h-11 w-11 rounded-full"
+                    onClick={handleIncrementFromDetail}
+                    disabled={variants.length > 0 && selectedVariant?.stock_quantity === 0}
+                  >
+                    +
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  size="lg"
+                  className="w-full gradient-luxury shadow-luxury"
+                  onClick={handleAddToCart}
+                  disabled={
+                    (isBundle && !bundleReady) ||
+                    (!isBundle && variants.length > 0 && (!selectedVariant || selectedVariant.stock_quantity === 0))
+                  }
+                >
+                  <ShoppingCart className="h-5 w-5 mr-2" />
+                  Add to Cart
+                  {!isBundle && selectedVariant && ` - ${formatSize(selectedVariant.size)}`}
+                </Button>
+              )}
               <Button
                 size="lg"
                 variant="outline"
                 className="w-full"
                 onClick={handleBuyNow}
-                disabled={variants.length > 0 && (!selectedVariant || selectedVariant.stock_quantity === 0)}
+                disabled={
+                  (isBundle && !bundleReady) ||
+                  (!isBundle && variants.length > 0 && (!selectedVariant || selectedVariant.stock_quantity === 0))
+                }
               >
                 Buy It Now
               </Button>
-              {selectedVariant && selectedVariant.stock_quantity < 10 && selectedVariant.stock_quantity > 0 && (
+              {!isBundle && selectedVariant && selectedVariant.stock_quantity < 10 && selectedVariant.stock_quantity > 0 && (
                 <p className="text-sm text-orange-600">
                   Only {selectedVariant.stock_quantity} left in stock!
                 </p>

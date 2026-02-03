@@ -7,8 +7,26 @@ export interface CartItem {
   _id: string;
   productId: string;
   quantity: number;
+  variant_id?: string | null;
   variant_size?: string | null;
   variant_price?: number | null;
+  productType?: string | null;
+  bundle_signature?: string | null;
+  bundleItems?: Array<{
+    productId: string;
+    quantity: number;
+    variant_id?: string | null;
+    variant_size?: string | null;
+    variant_price?: number | null;
+    product?: {
+      _id: string;
+      name: string;
+      price: number;
+      image_url?: string | null;
+      image_urls?: string[] | null;
+      images?: any[] | null;
+    };
+  }>;
   product: {
     _id: string;
     name: string;
@@ -83,7 +101,27 @@ export const useCart = () => {
   const addToCart = async (
     productId: string,
     quantity: number = 1,
-    options?: { variantSize?: string; variantPrice?: number }
+    options?: {
+      variantId?: string;
+      variantSize?: string;
+      variantPrice?: number;
+      bundleItems?: Array<{
+        productId: string;
+        quantity: number;
+        variantId?: string | null;
+        variantSize?: string | null;
+        variantPrice?: number | null;
+        product?: {
+          _id: string;
+          name: string;
+          price: number;
+          image_url?: string | null;
+          image_urls?: string[] | null;
+          images?: any[] | null;
+        };
+      }>;
+      productType?: string;
+    }
   ) => {
     setLoading(true);
     try {
@@ -108,10 +146,47 @@ export const useCart = () => {
       }
 
       const product = productData;
-      const existingIndex = items.findIndex(item => 
-        item.productId === productId && 
-        item.variant_size === (options?.variantSize ?? null)
-      );
+      const normalizeBundleSignature = (bundleItems?: CartItem["bundleItems"]) => {
+        if (!bundleItems || bundleItems.length === 0) return null;
+        const normalized = bundleItems
+          .map((bundleItem) => ({
+            productId: bundleItem.productId,
+            quantity: bundleItem.quantity,
+            variant_id: bundleItem.variant_id ?? null,
+            variant_size: bundleItem.variant_size ?? null
+          }))
+          .sort((a, b) => {
+            if (a.productId !== b.productId) return a.productId.localeCompare(b.productId);
+            if ((a.variant_id ?? "") !== (b.variant_id ?? "")) return (a.variant_id ?? "").localeCompare(b.variant_id ?? "");
+            return (a.variant_size ?? "").localeCompare(b.variant_size ?? "");
+          });
+        return JSON.stringify(normalized);
+      };
+
+      const productType = options?.productType || product.productType || "regular";
+      const preparedBundleItems = (options?.bundleItems || [])
+        .map((bundleItem) => ({
+          productId: bundleItem.productId,
+          quantity: bundleItem.quantity,
+          variant_id: bundleItem.variantId ?? bundleItem.variant_id ?? null,
+          variant_size: bundleItem.variantSize ?? bundleItem.variant_size ?? null,
+          variant_price: bundleItem.variantPrice ?? bundleItem.variant_price ?? null,
+          product: bundleItem.product
+        }))
+        .filter((bundleItem) => bundleItem.quantity > 0);
+      const bundleSignature = normalizeBundleSignature(preparedBundleItems);
+
+      const existingIndex = items.findIndex(item => {
+        if (item.productId !== productId) return false;
+        const isBundle = (item.productType ?? productType) === "bundle" || !!item.bundleItems?.length;
+        if (isBundle) {
+          return (item.bundle_signature ?? null) === bundleSignature;
+        }
+        return (
+          (item.variant_id ?? null) === (options?.variantId ?? null) &&
+          (item.variant_size ?? null) === (options?.variantSize ?? null)
+        );
+      });
       
       let newItems: CartItem[];
 
@@ -121,14 +196,24 @@ export const useCart = () => {
         newItems[existingIndex].quantity += quantity;
         if (options?.variantPrice !== undefined) newItems[existingIndex].variant_price = options.variantPrice;
         if (options?.variantSize !== undefined) newItems[existingIndex].variant_size = options.variantSize;
+        if (options?.variantId !== undefined) newItems[existingIndex].variant_id = options.variantId;
+        if (bundleSignature) {
+          newItems[existingIndex].bundle_signature = bundleSignature;
+          newItems[existingIndex].bundleItems = preparedBundleItems;
+          newItems[existingIndex].productType = productType;
+        }
       } else {
         // Add new item
         const newItem: CartItem = {
           _id: `local-${Date.now()}-${Math.random()}`,
           productId: productId,
           quantity,
+          variant_id: options?.variantId ?? null,
           variant_size: options?.variantSize ?? null,
           variant_price: options?.variantPrice ?? null,
+          productType,
+          bundle_signature: bundleSignature,
+          bundleItems: preparedBundleItems.length > 0 ? preparedBundleItems : undefined,
           product: {
             _id: product._id || productId,
             name: product.name,

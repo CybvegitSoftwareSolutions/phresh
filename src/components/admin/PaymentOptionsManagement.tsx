@@ -234,7 +234,7 @@ export const PaymentOptionsManagement = () => {
                       type="email"
                       value={form.contact_email}
                       onChange={(event) => setForm((prev) => ({ ...prev, contact_email: event.target.value }))}
-                      placeholder="support@phresh.com"
+                      placeholder="info@phreshmcr.com"
                     />
                   </div>
                   <div>

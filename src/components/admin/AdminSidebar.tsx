@@ -9,7 +9,6 @@ import {
   Megaphone,
   LogOut,
   User,
-  Settings,
   PlusCircle,
   Trash2,
   LayoutDashboard,
@@ -17,7 +16,8 @@ import {
   Mail,
   Building2,
   MessageSquare,
-  CreditCard
+  BadgePercent,
+  Truck
 } from "lucide-react";
 import {
   Sidebar,
@@ -78,14 +78,14 @@ const menuItems = [
     icon: Megaphone
   },
   {
-    title: "Shipping Settings",
-    url: "/admin-dashboard/shipping",
-    icon: Settings
+    title: "Coupons",
+    url: "/admin-dashboard/coupons",
+    icon: BadgePercent
   },
   {
-    title: "Payment Options",
-    url: "/admin-dashboard/payment-options",
-    icon: CreditCard
+    title: "Delivery Charges",
+    url: "/admin-dashboard/delivery-charges",
+    icon: Truck
   },
   {
     title: "Reviews",

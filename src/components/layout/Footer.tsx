@@ -1,21 +1,12 @@
 import { Instagram, Facebook, Youtube, Linkedin, Smartphone, Banknote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useEffect, useState } from "react";
-import { Input as TextInput } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { apiService } from "@/services/api";
-import { toast } from "@/components/ui/use-toast";
+import { useState } from "react";
 
 export const Footer = () => {
-  const phoneNumber = import.meta.env.VITE_COMPANY_PHONE || "+923020025727";
-  const email = "support@phresh.com"; // Always use support@phresh.com
+  const email = "info@phreshmcr.com"; // Always use info@phreshmcr.com
   const [subscribeEmail, setSubscribeEmail] = useState("");
   const [subscribeMsg, setSubscribeMsg] = useState<string | null>(null);
-  const [cName, setCName] = useState("");
-  const [cEmail, setCEmail] = useState("");
-  const [cMsg, setCMsg] = useState("");
-  const [sending, setSending] = useState(false);
   // (Blogs preview removed; showing a single link in Order Info instead)
 
   const handleSubscribe = () => {
@@ -39,7 +30,7 @@ export const Footer = () => {
       }}
     >
       <div className="container mx-auto px-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 text-center">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
           {/* Order Info */}
           <div className="space-y-4 flex flex-col items-center">
             <h3 className="text-lg font-semibold">ORDER INFO</h3>
@@ -98,7 +89,7 @@ export const Footer = () => {
 
           {/* Sign Up */}
           <div className="space-y-4 flex flex-col items-center">
-            <h3 className="text-lg font-semibold text-white">SIGN UP AND SAVE</h3>
+            <h3 className="text-lg font-semibold text-white">NEWSLETTER</h3>
             <p className="text-sm text-white/90">
               Subscribe to get special offers, free giveaways, and once-in-a-lifetime deals.
             </p>
@@ -169,7 +160,6 @@ export const Footer = () => {
             <div className="space-y-2 text-sm text-white/90">
               <p>Monday - Saturday: 10am-10pm PST</p>
               {/* <p>Sunday: 2pm - 11pm PST</p> */}
-              <p>Call Us at: {phoneNumber}</p>
               <p>Customer Support:</p>
               <a
                 href={`mailto:${email}`}
@@ -179,45 +169,11 @@ export const Footer = () => {
               </a>
               <p>For Business Queries:</p>
               <a
-                href={`mailto:support@phresh.com`}
+                href={`mailto:info@phreshmcr.com`}
                 className="hover:text-green-200 transition-colors text-white"
               >
-                support@phresh.com
+                info@phreshmcr.com
               </a>
-            </div>
-          </div>
-
-          {/* Contact Us (Footer Mini Form) */}
-          <div className="space-y-4 flex flex-col items-center">
-            <h3 className="text-lg font-semibold text-white">CONTACT US</h3>
-            <div className="w-full max-w-sm space-y-2">
-              <TextInput placeholder="Name" value={cName} onChange={(e) => setCName(e.target.value)} />
-              <TextInput type="email" placeholder="Email" value={cEmail} onChange={(e) => setCEmail(e.target.value)} />
-              <Textarea rows={3} placeholder="Message" value={cMsg} onChange={(e) => setCMsg(e.target.value)} />
-              <Button onClick={async () => {
-                if (!cName || !cEmail || !cMsg) { toast({ title: 'Please fill all fields', variant: 'destructive' }); return; }
-                setSending(true);
-                try {
-                  const response = await apiService.submitContactQuery({
-                    name: cName,
-                    email: cEmail,
-                    subject: "Contact Form Submission",
-                    message: cMsg,
-                    category: "general"
-                  });
-                  
-                  if (!response.success) {
-                    throw new Error(response.message || "Failed to submit contact query");
-                  }
-                  
-                  toast({ title: 'Thanks for contacting us!', description: "We'll get back to you shortly." });
-                  setCName(''); setCEmail(''); setCMsg('');
-                } catch (e: any) {
-                  toast({ title: 'Failed to send', description: e.message || 'Please try again', variant: 'destructive' });
-                } finally { setSending(false); }
-              }} disabled={sending} className="w-full bg-green-800 text-white hover:bg-green-900 font-semibold">
-                {sending ? 'Sending…' : 'Submit'}
-              </Button>
             </div>
           </div>
 

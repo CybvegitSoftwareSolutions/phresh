@@ -124,7 +124,7 @@ const PrivacyPolicy = () => {
               If you have any questions about this privacy policy or our data practices, please contact us:
             </p>
             <div className="mt-4 space-y-2 text-muted-foreground">
-              <p>Email: support@phresh.com</p>
+              <p>Email: info@phreshmcr.com</p>
               <p>Phone: 03020025727</p>
               <p>Address: Pakistan</p>
             </div>

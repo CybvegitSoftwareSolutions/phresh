@@ -78,7 +78,7 @@ const ContactUs = () => {
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8">CONTACT US</h1>
             <div className="max-w-3xl mx-auto space-y-2 text-gray-700">
               <p>WhatsApp Us: 03020025727</p>
-              <p>Customer Support: <a href="mailto:support@phresh.com" className="text-primary hover:underline">support@phresh.com</a></p>
+              <p>Customer Support: <a href="mailto:info@phreshmcr.com" className="text-primary hover:underline">info@phreshmcr.com</a></p>
             </div>
         </div>
 

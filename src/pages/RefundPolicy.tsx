@@ -21,7 +21,7 @@ const contactPoints = [
   },
   {
     label: "Customer Support",
-    value: "support@phresh.com",
+    value: "info@phreshmcr.com",
     icon: Mail,
   },
 ];

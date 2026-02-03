@@ -9,22 +9,44 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
+import { cn } from "@/lib/utils";
 import * as XLSX from "xlsx";
-import { Loader2, Search, Eye, Package, Truck, CheckCircle, XCircle, Clock, Download } from "lucide-react";
+import { Loader2, Search, Eye, Package, Truck, CheckCircle, XCircle, Clock, Download, CreditCard, MapPin, ChevronDown, Trash2 } from "lucide-react";
 
 interface OrderItem {
   _id: string;
   quantity: number;
   price_at_time: number;
+  total?: number;
+  variant?: {
+    variantId?: string;
+    name?: string;
+    price?: number;
+  } | null;
+  bundleItems?: Array<{
+    _id?: string;
+    product?: any;
+    quantity: number;
+    price?: number;
+    total?: number;
+    variant?: {
+      variantId?: string;
+      name?: string;
+      price?: number;
+    } | null;
+  }>;
   product: {
     _id: string;
     name: string;
     price: number;
+    image_url?: string;
+    images?: Array<{ url: string }>;
   };
 }
 
 interface Order {
   _id: string;
+  id?: string;
   orderNumber: string;
   customer_name: string;
   customer_email: string;
@@ -36,17 +58,37 @@ interface Order {
   notes?: string;
   createdAt: string;
   order_items: OrderItem[];
+  paymentMethod?: string;
+  paymentStatus?: string;
+  subtotal?: number;
+  shippingCost?: number;
+  tax?: number;
+  discount?: number;
+  stripeFees?: number;
+  totalWithFees?: number;
+  currency?: string;
+  stripePaymentIntentId?: string;
 }
+
+type GroupedOrders = {
+  pending: Order[];
+  completed: Order[];
+  cancelled: Order[];
+};
 
 export function OrdersManagement() {
   const [orders, setOrders] = useState<any[]>([]);
+  const [groupedOrders, setGroupedOrders] = useState<GroupedOrders | null>(null);
+  const [activeTab, setActiveTab] = useState<keyof GroupedOrders>("pending");
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [updateLoading, setUpdateLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -56,15 +98,17 @@ export function OrdersManagement() {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const response = await apiService.getAllOrders();
+      const response = await apiService.getAllOrders({ page: 1, limit: 20, grouped: true });
       console.log('Orders response:', response);
       if (response.success && response.data) {
-        // Handle different possible data structures
-        const ordersData = response.data.orders || response.data.data || response.data;
-        const ordersList = Array.isArray(ordersData) ? ordersData : [];
-        
-        // Transform orders to ensure they have all required fields
-        const transformedOrders = ordersList.map((order: any) => {
+        const rawData = response.data?.data ?? response.data;
+        const isGrouped =
+          rawData &&
+          typeof rawData === "object" &&
+          !Array.isArray(rawData) &&
+          ("pending" in rawData || "completed" in rawData || "cancelled" in rawData);
+
+        const normalizeOrder = (order: any) => {
           // Extract customer data from shippingAddress or user object
           const shippingAddress = order.shippingAddress || {};
           const user = order.user || {};
@@ -104,10 +148,34 @@ export function OrdersManagement() {
               _id: item._id || item.id || `item-${Date.now()}`,
               quantity: item.quantity || 1,
               price_at_time: Number(priceAtTime) || 0, // Ensure it's a number
+              total: Number(item.total) || Number(priceAtTime) * (Number(item.quantity) || 1),
+              variant: item.variant
+                ? {
+                    variantId: item.variant.variantId || item.variant._id,
+                    name: item.variant.name,
+                    price: item.variant.price
+                  }
+                : null,
+              bundleItems: (item.bundleItems || item.bundle_items || []).map((bundleItem: any) => ({
+                _id: bundleItem._id || bundleItem.id,
+                product: bundleItem.product,
+                quantity: bundleItem.quantity || 0,
+                price: bundleItem.price,
+                total: bundleItem.total,
+                variant: bundleItem.variant
+                  ? {
+                      variantId: bundleItem.variant.variantId || bundleItem.variant._id,
+                      name: bundleItem.variant.name,
+                      price: bundleItem.variant.price
+                    }
+                  : null
+              })),
               product: {
                 _id: item.product?._id || item.productId || item.product?.id || '',
                 name: item.product?.name || item.productName || 'Unknown Product',
-                price: item.product?.price || item.price || priceAtTime || 0
+                price: item.product?.price || item.price || priceAtTime || 0,
+                image_url: item.product?.images?.[0]?.url || item.product?.image_url || '',
+                images: item.product?.images || []
               }
             };
           });
@@ -125,12 +193,41 @@ export function OrdersManagement() {
             tracking_number: order.tracking_number || order.trackingNumber || order.tracking || undefined,
             notes: order.notes || order.note || undefined,
             createdAt: order.createdAt || order.created_at || order.date || new Date().toISOString(),
-            order_items
+            order_items,
+            paymentMethod: order.paymentMethod || order.payment_method || '',
+            paymentStatus: order.paymentStatus || order.payment_status || '',
+            subtotal: order.subtotal,
+            shippingCost: order.shippingCost,
+            tax: order.tax,
+            discount: order.discount,
+            stripeFees: order.stripeFees,
+            totalWithFees: order.totalWithFees,
+            currency: order.paymentDetails?.currency || order.currency || 'GBP',
+            stripePaymentIntentId: order.stripePaymentIntentId || order.paymentDetails?.stripePaymentIntentId || ''
           };
-        });
-        
-        console.log('Transformed orders:', transformedOrders);
-        setOrders(transformedOrders);
+        };
+
+        if (isGrouped) {
+          const pending = (rawData.pending || []).map(normalizeOrder);
+          const completed = (rawData.completed || []).map(normalizeOrder);
+          const cancelled = (rawData.cancelled || []).map(normalizeOrder);
+          const combined = [...pending, ...completed, ...cancelled];
+          console.log('Transformed grouped orders:', { pending, completed, cancelled });
+          setGroupedOrders({ pending, completed, cancelled });
+          setOrders(combined);
+        } else {
+          // Handle different possible data structures
+          const ordersData = rawData?.orders || rawData?.data || rawData;
+          const ordersList = Array.isArray(ordersData)
+            ? ordersData
+            : Array.isArray(ordersData?.data)
+              ? ordersData.data
+              : [];
+          const transformedOrders = ordersList.map(normalizeOrder);
+          console.log('Transformed orders:', transformedOrders);
+          setGroupedOrders(null);
+          setOrders(transformedOrders);
+        }
       } else {
         throw new Error(response.message || "Failed to fetch orders");
       }
@@ -201,6 +298,34 @@ export function OrdersManagement() {
     }
   };
 
+  const deleteOrder = async (orderId: string) => {
+    if (!window.confirm("Delete this order? This cannot be undone.")) return;
+    setDeleteLoading(true);
+    try {
+      const response = await apiService.deleteOrderAdmin(orderId);
+      if (!response.success) {
+        throw new Error(response.message || "Failed to delete order");
+      }
+      toast({
+        title: "Order Deleted",
+        description: "The order was removed successfully.",
+      });
+      if (selectedOrder?._id === orderId) {
+        setSelectedOrder(null);
+      }
+      fetchOrders();
+    } catch (error) {
+      console.error("Error deleting order:", error);
+      toast({
+        title: "Delete Failed",
+        description: error instanceof Error ? error.message : "Failed to delete order",
+        variant: "destructive",
+      });
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   const getStatusBadge = (status: string | undefined) => {
     if (!status) {
       return (
@@ -233,11 +358,80 @@ export function OrdersManagement() {
     );
   };
 
+  const getPaymentBadge = (status?: string) => {
+    if (!status) {
+      return <Badge variant="outline">Payment: Unknown</Badge>;
+    }
+    const normalized = status.toLowerCase();
+    if (['paid', 'succeeded'].includes(normalized)) {
+      return <Badge className="bg-emerald-500 text-white">Payment: Paid</Badge>;
+    }
+    if (['failed', 'canceled', 'requires_payment_method'].includes(normalized)) {
+      return <Badge className="bg-red-500 text-white">Payment: Failed</Badge>;
+    }
+    return <Badge className="bg-yellow-500 text-white">Payment: Pending</Badge>;
+  };
+
+  const getPaymentMethodLabel = (method?: string) => {
+    if (!method) return "Unknown";
+    const normalized = method.toLowerCase();
+    if (normalized === "cash_on_delivery" || normalized === "cod") return "COD";
+    if (normalized === "stripe" || normalized === "online" || normalized === "card") return "Online";
+    return method.replace(/_/g, " ");
+  };
+
+  const isOnlinePayment = (method?: string) => {
+    if (!method) return false;
+    const normalized = method.toLowerCase();
+    return normalized === "stripe" || normalized === "online" || normalized === "card";
+  };
+
+  const formatStatusLabel = (value?: string) => {
+    if (!value) return "Unknown";
+    return value
+      .toLowerCase()
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
+  const formatCurrency = (value: number, currency = "GBP") => {
+    const amount = Number(value) || 0;
+    try {
+      return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amount);
+    } catch {
+      return `${currency} ${amount.toFixed(2)}`;
+    }
+  };
+
+  const formatDate = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString();
+  };
+
   const calculateTotals = (order: Order) => {
-    const itemsTotal = order.order_items.reduce((sum, item) => sum + Number(item.price_at_time) * item.quantity, 0);
-    const shipping = Math.max(Number(order.total_amount) - itemsTotal, 0);
+    const itemsTotal = order.subtotal ?? order.order_items.reduce((sum, item) => sum + Number(item.price_at_time) * item.quantity, 0);
+    const shipping = order.shippingCost ?? Math.max(Number(order.total_amount) - itemsTotal, 0);
     return { itemsTotal, shipping };
   };
+
+  const activeOrders = useMemo(() => {
+    if (groupedOrders) {
+      return groupedOrders[activeTab] || [];
+    }
+    return orders;
+  }, [groupedOrders, activeTab, orders]);
+
+  const tabCounts = useMemo(() => {
+    if (groupedOrders) {
+      return {
+        pending: groupedOrders.pending.length,
+        completed: groupedOrders.completed.length,
+        cancelled: groupedOrders.cancelled.length,
+      };
+    }
+    return { pending: orders.length, completed: 0, cancelled: 0 };
+  }, [groupedOrders, orders.length]);
 
   const filteredOrders = useMemo(() => {
     const from = fromDate ? new Date(fromDate) : null;
@@ -245,7 +439,7 @@ export function OrdersManagement() {
     if (from) from.setHours(0, 0, 0, 0);
     if (to) to.setHours(23, 59, 59, 999);
 
-    return orders.filter(order => {
+    return activeOrders.filter(order => {
       const matchesSearch =
         order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
         order.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -259,7 +453,7 @@ export function OrdersManagement() {
       if (to && created > to) return false;
       return true;
     });
-  }, [orders, searchTerm, fromDate, toDate]);
+  }, [activeOrders, searchTerm, fromDate, toDate]);
 
   const handleDownloadReport = (exportOrders: Order[]) => {
     if (exportOrders.length === 0) return;
@@ -275,11 +469,19 @@ export function OrdersManagement() {
           "Customer Phone": order.customer_phone,
           "Customer Address": order.customer_address,
           Status: order.status,
+          "Payment Method": order.paymentMethod || "",
+          "Payment Status": order.paymentStatus || "",
           "Created At": new Date(order.createdAt).toLocaleString(),
           "Items Count": order.order_items.length,
           "Items Subtotal": itemsTotal,
           "Shipping Charge": shipping,
+          Tax: order.tax ?? 0,
+          Discount: order.discount ?? 0,
           "Total Amount": Number(order.total_amount),
+          "Stripe Fees": order.stripeFees ?? 0,
+          "Total With Fees": order.totalWithFees ?? "",
+          "Stripe Intent": order.stripePaymentIntentId || "",
+          Currency: order.currency || "",
           "Tracking Number": order.tracking_number || "",
           Notes: order.notes || "",
         };
@@ -289,6 +491,8 @@ export function OrdersManagement() {
         order.order_items.map(item => ({
           "Order Number": order.orderNumber,
           Product: item.product.name,
+          Variant: item.variant?.name || "",
+          "Variant ID": item.variant?.variantId || "",
           Quantity: item.quantity,
           "Unit Price": Number(item.price_at_time),
           "Line Total": Number(item.price_at_time) * item.quantity,
@@ -316,6 +520,12 @@ export function OrdersManagement() {
       </div>
     );
   }
+
+  const tabs: Array<{ key: keyof GroupedOrders; label: string }> = [
+    { key: "pending", label: "Pending" },
+    { key: "completed", label: "Completed" },
+    { key: "cancelled", label: "Cancelled" },
+  ];
 
   return (
     <div className="p-6 space-y-6">
@@ -379,20 +589,41 @@ export function OrdersManagement() {
         />
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        {tabs.map((tab) => (
+          <Button
+            key={tab.key}
+            type="button"
+            size="sm"
+            variant={activeTab === tab.key ? "default" : "outline"}
+            onClick={() => setActiveTab(tab.key)}
+            className={cn(activeTab === tab.key ? "" : "bg-white")}
+          >
+            {tab.label}
+            <Badge variant="secondary" className="ml-2">
+              {tabCounts[tab.key]}
+            </Badge>
+          </Button>
+        ))}
+      </div>
+
       {/* Orders List */}
       <div className="space-y-4">
         {filteredOrders.map((order) => (
-          <Card key={order._id}>
-            <CardHeader>
-              <div className="flex justify-between items-start">
+          <Card key={order._id} className="shadow-soft border-muted/60">
+            <CardHeader className="space-y-3">
+              <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <CardTitle className="text-lg">Order #{order.orderNumber}</CardTitle>
                   <CardDescription>
-                    {order.customer_name} • {order.customer_email}
+                    {order.customer_name} • {order.customer_email || "Guest"}
                   </CardDescription>
+                  <p className="text-xs text-muted-foreground mt-1">{formatDate(order.createdAt)}</p>
                 </div>
-                <div className="flex items-center space-x-2">
-                  {getStatusBadge(order.status)}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline">{getPaymentMethodLabel(order.paymentMethod)}</Badge>
+                  {isOnlinePayment(order.paymentMethod) && getPaymentBadge(order.paymentStatus)}
+                  <Badge variant="outline">Order: {formatStatusLabel(order.status)}</Badge>
                   <Dialog open={selectedOrder?._id === order._id} onOpenChange={(open) => setSelectedOrder(open ? order : null)}>
                     <DialogTrigger asChild>
                       <Button
@@ -421,32 +652,207 @@ export function OrdersManagement() {
                       )}
                     </DialogContent>
                   </Dialog>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => deleteOrder(order._id)}
+                    disabled={deleteLoading}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
+
+              <div className="grid gap-3 md:grid-cols-4">
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Total</p>
+                  <p className="text-lg font-semibold">
+                    {formatCurrency(order.total_amount, order.currency)}
+                  </p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Items</p>
+                  <p className="text-lg font-semibold">{order.order_items.length}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Payment</p>
+                  <p className="text-sm font-medium">{getPaymentMethodLabel(order.paymentMethod)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {isOnlinePayment(order.paymentMethod) ? formatStatusLabel(order.paymentStatus) : "Not required"}
+                  </p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Shipping</p>
+                  <p className="text-sm font-medium">
+                    {formatCurrency(order.shippingCost ?? 0, order.currency)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{order.tracking_number ? "Tracked" : "No tracking"}</p>
+                </div>
+              </div>
+
+              <Button
+                variant="ghost"
+                className="w-full justify-center gap-2 text-sm"
+                onClick={() => setExpandedOrderId(expandedOrderId === order._id ? null : order._id)}
+              >
+                {expandedOrderId === order._id ? "Hide details" : "View details"}
+                <ChevronDown className={cn("h-4 w-4 transition-transform", expandedOrderId === order._id && "rotate-180")} />
+              </Button>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <p className="text-sm font-medium">Total Amount</p>
-                  <p className="text-lg font-bold">PKR {order.total_amount}</p>
+            {expandedOrderId === order._id && (
+              <CardContent className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-lg border p-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold mb-2">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    Shipping Details
+                  </div>
+                  <p className="text-sm">{order.customer_name}</p>
+                  <p className="text-sm text-muted-foreground">{order.customer_phone || "N/A"}</p>
+                  <p className="text-sm text-muted-foreground">{order.customer_address || "N/A"}</p>
                 </div>
-                <div>
-                  <p className="text-sm font-medium">Order Date</p>
-                  <p>{new Date(order.createdAt).toLocaleDateString()}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Items</p>
-                  <p>{order.order_items.length} item(s)</p>
+                <div className="rounded-lg border p-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold mb-2">
+                    <CreditCard className="h-4 w-4 text-muted-foreground" />
+                    Payment Summary
+                  </div>
+                  <div className="space-y-1 text-sm text-muted-foreground">
+                    <div className="flex justify-between">
+                      <span>Payment Method</span>
+                      <span>{getPaymentMethodLabel(order.paymentMethod)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Payment Status</span>
+                      <span>{isOnlinePayment(order.paymentMethod) ? formatStatusLabel(order.paymentStatus) : "Not required"}</span>
+                    </div>
+                    {isOnlinePayment(order.paymentMethod) && order.stripePaymentIntentId && (
+                      <div className="flex justify-between">
+                        <span>Stripe Intent</span>
+                        <span className="font-mono text-xs">{order.stripePaymentIntentId}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span>Subtotal</span>
+                      <span>{formatCurrency(order.subtotal ?? 0, order.currency)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Shipping</span>
+                      <span>{formatCurrency(order.shippingCost ?? 0, order.currency)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Tax</span>
+                      <span>{formatCurrency(order.tax ?? 0, order.currency)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Discount</span>
+                      <span>{formatCurrency(order.discount ?? 0, order.currency)}</span>
+                    </div>
+                    {isOnlinePayment(order.paymentMethod) && order.stripeFees !== undefined && (
+                      <div className="flex justify-between">
+                        <span>Stripe Fees</span>
+                        <span>{formatCurrency(order.stripeFees ?? 0, order.currency)}</span>
+                      </div>
+                    )}
+                    {isOnlinePayment(order.paymentMethod) && order.totalWithFees !== undefined && (
+                      <div className="flex justify-between font-semibold text-foreground">
+                        <span>Total with Fees</span>
+                        <span>{formatCurrency(order.totalWithFees ?? order.total_amount, order.currency)}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-              
+
+              <div className="rounded-lg border p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold">Items</h4>
+                  <span className="text-xs text-muted-foreground">{order.order_items.length} item(s)</span>
+                </div>
+                <div className="space-y-3">
+                  {order.order_items.map((item) => {
+                    const image =
+                      item.product.image_url || item.product.images?.[0]?.url || "/placeholder.svg";
+                    return (
+                      <div key={item._id} className="flex items-start gap-3 border-b pb-3 last:border-b-0 last:pb-0">
+                        <div className="h-12 w-12 rounded border overflow-hidden bg-muted">
+                          <img src={image} alt={item.product.name} className="h-full w-full object-cover" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">{item.product.name || "Unknown Product"}</p>
+                          {item.variant?.name && (
+                            <p className="text-xs text-muted-foreground">Variant: {item.variant.name}</p>
+                          )}
+                          {item.variant?.variantId && (
+                            <p className="text-[11px] text-muted-foreground">Variant ID: {item.variant.variantId}</p>
+                          )}
+                          {item.bundleItems && item.bundleItems.length > 0 && (
+                            <div className="mt-2 space-y-2 text-xs text-muted-foreground">
+                              {item.bundleItems.map((bundleItem) => {
+                                const bundleProduct =
+                                  typeof bundleItem.product === "object" && bundleItem.product !== null
+                                    ? bundleItem.product
+                                    : null;
+                                const bundleName =
+                                  bundleProduct?.name ||
+                                  bundleProduct?._id ||
+                                  (typeof bundleItem.product === "string" ? bundleItem.product : "Bundle item");
+                                const bundleImage =
+                                  bundleProduct?.images?.[0]?.url ||
+                                  bundleProduct?.image_url ||
+                                  "/placeholder.svg";
+                                return (
+                                  <div
+                                    key={bundleItem._id || `${bundleName}-${bundleItem.quantity}`}
+                                    className="flex items-center gap-2"
+                                  >
+                                    <div className="h-8 w-8 rounded border overflow-hidden bg-muted">
+                                      <img
+                                        src={bundleImage}
+                                        alt={bundleName}
+                                        className="h-full w-full object-cover"
+                                      />
+                                    </div>
+                                    <span>
+                                      {bundleName}
+                                      {bundleItem.variant?.name ? ` (${bundleItem.variant.name})` : ""}
+                                      {" - "}Qty: {bundleItem.quantity}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-right text-sm">
+                          <p>Qty: {item.quantity}</p>
+                          <p className="text-muted-foreground">
+                            {formatCurrency(item.price_at_time, order.currency)}
+                          </p>
+                          <p className="font-semibold">
+                            {formatCurrency(item.total ?? item.price_at_time * item.quantity, order.currency)}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               {order.tracking_number && (
-                <div className="mt-4 p-3 bg-muted rounded-lg">
-                  <p className="text-sm font-medium">Tracking Number</p>
+                <div className="rounded-lg border p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Tracking Number</p>
                   <p className="font-mono">{order.tracking_number}</p>
                 </div>
               )}
+
+              {order.notes && (
+                <div className="rounded-lg border p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Notes</p>
+                  <p className="text-sm">{order.notes}</p>
+                </div>
+              )}
             </CardContent>
+            )}
           </Card>
         ))}
       </div>
@@ -476,9 +882,40 @@ function OrderManagementDialog({
   const [status, setStatus] = useState(order.status);
   const [trackingNumber, setTrackingNumber] = useState(order.tracking_number || "");
   const [notes, setNotes] = useState(order.notes || "");
+  const currency = order.currency || "GBP";
+
+  const getPaymentMethodLabel = (method?: string) => {
+    if (!method) return "Unknown";
+    const normalized = method.toLowerCase();
+    if (normalized === "cash_on_delivery" || normalized === "cod") return "COD";
+    if (normalized === "stripe" || normalized === "online" || normalized === "card") return "Online";
+    return method.replace(/_/g, " ");
+  };
+
+  const isOnlinePayment = (method?: string) => {
+    if (!method) return false;
+    const normalized = method.toLowerCase();
+    return normalized === "stripe" || normalized === "online" || normalized === "card";
+  };
+
+  const formatStatusLabel = (value?: string) => {
+    if (!value) return "Unknown";
+    return value
+      .toLowerCase()
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
+  const formatCurrencyLocal = (value: number) => {
+    try {
+      return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(Number(value) || 0);
+    } catch {
+      return `${currency} ${Number(value || 0).toFixed(2)}`;
+    }
+  };
 
   const handleSubmit = () => {
-    onUpdate(order.id, status, trackingNumber, notes);
+    onUpdate(order.id || order._id, status, trackingNumber, notes);
   };
 
   return (
@@ -494,6 +931,20 @@ function OrderManagementDialog({
           <p className="text-sm font-medium">Phone</p>
           <p>{order.customer_phone}</p>
         </div>
+        <div>
+          <p className="text-sm font-medium">Payment Method</p>
+          <p>{getPaymentMethodLabel(order.paymentMethod)}</p>
+        </div>
+        <div>
+          <p className="text-sm font-medium">Payment Status</p>
+          <p>{isOnlinePayment(order.paymentMethod) ? formatStatusLabel(order.paymentStatus) : "Not required"}</p>
+        </div>
+        {isOnlinePayment(order.paymentMethod) && order.stripePaymentIntentId && (
+          <div className="col-span-2">
+            <p className="text-sm font-medium">Stripe Intent</p>
+            <p className="font-mono text-sm">{order.stripePaymentIntentId}</p>
+          </div>
+        )}
         <div className="col-span-2">
           <p className="text-sm font-medium">Address</p>
           <p>{order.customer_address}</p>
@@ -508,11 +959,47 @@ function OrderManagementDialog({
             <div key={item._id} className="flex justify-between items-center p-2 bg-muted rounded">
               <div>
                 <p className="font-medium">{item.product.name}</p>
+                {item.variant?.name && (
+                  <p className="text-xs text-muted-foreground">Variant: {item.variant.name}</p>
+                )}
                 <p className="text-sm text-muted-foreground">Qty: {item.quantity}</p>
+                {item.bundleItems && item.bundleItems.length > 0 && (
+                  <div className="mt-2 space-y-2 text-xs text-muted-foreground">
+                    {item.bundleItems.map((bundleItem) => {
+                      const bundleProduct =
+                        typeof bundleItem.product === "object" && bundleItem.product !== null
+                          ? bundleItem.product
+                          : null;
+                      const bundleName =
+                        bundleProduct?.name ||
+                        bundleProduct?._id ||
+                        (typeof bundleItem.product === "string" ? bundleItem.product : "Bundle item");
+                      const bundleImage =
+                        bundleProduct?.images?.[0]?.url ||
+                        bundleProduct?.image_url ||
+                        "/placeholder.svg";
+                      return (
+                        <div
+                          key={bundleItem._id || `${bundleName}-${bundleItem.quantity}`}
+                          className="flex items-center gap-2"
+                        >
+                          <div className="h-8 w-8 rounded border overflow-hidden bg-muted">
+                            <img src={bundleImage} alt={bundleName} className="h-full w-full object-cover" />
+                          </div>
+                          <span>
+                            {bundleName}
+                            {bundleItem.variant?.name ? ` (${bundleItem.variant.name})` : ""}
+                            {" - "}Qty: {bundleItem.quantity}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               <div className="text-right">
-                <p className="font-medium">PKR {((Number(item.price_at_time) || 0) * (Number(item.quantity) || 0)).toFixed(2)}</p>
-                <p className="text-xs text-muted-foreground">Unit: PKR {(Number(item.price_at_time) || 0).toFixed(2)}</p>
+                <p className="font-medium">{formatCurrencyLocal((Number(item.price_at_time) || 0) * (Number(item.quantity) || 0))}</p>
+                <p className="text-xs text-muted-foreground">Unit: {formatCurrencyLocal(Number(item.price_at_time) || 0)}</p>
               </div>
             </div>
           ))}
@@ -525,20 +1012,20 @@ function OrderManagementDialog({
               const qty = Number(item.quantity) || 0;
               return sum + (price * qty);
             }, 0);
-            const shipping = Math.max(Number(order.total_amount) - itemsTotal, 0);
+            const shipping = order.shippingCost ?? Math.max(Number(order.total_amount) - itemsTotal, 0);
             return (
               <>
                 <div className="flex justify-between text-muted-foreground">
                   <span>Items Subtotal</span>
-                  <span>PKR {itemsTotal.toFixed(2)}</span>
+                  <span>{formatCurrencyLocal(itemsTotal)}</span>
                 </div>
                 <div className="flex justify-between text-muted-foreground">
                   <span>Delivery Charge</span>
-                  <span>PKR {shipping.toFixed(2)}</span>
+                  <span>{formatCurrencyLocal(shipping)}</span>
                 </div>
                 <div className="flex justify-between font-semibold">
                   <span>Total</span>
-                  <span>PKR {Number(order.total_amount).toFixed(2)}</span>
+                  <span>{formatCurrencyLocal(Number(order.total_amount))}</span>
                 </div>
               </>
             );

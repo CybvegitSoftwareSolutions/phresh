@@ -20,9 +20,12 @@ import { computeDiscountedPrice } from "@/utils/pricing";
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
 import { AuthSheet } from "@/components/AuthSheet";
+import { cn } from "@/lib/utils";
 
+// live key : pk_live_51SsNe2DBPVs6GDkm064tuvJs7kDMYG0G1Lr4BpbA2DACJricwZ6N89Pkvw8z0o6bBqB6cia30CPNIeKNtLSqBGM800j0D0TG1K
+// test key : pk_test_51SsNe2DBPVs6GDkmnLZ2Q9tOqumPhuAeHd7CGsf9eJ55pSV0fJwwxmlm3KWnVopcaCux0FiBY7mLY7b72sUgxeuJ00ZTkcq36O
 // Initialize Stripe - Replace with your publishable key
-const stripePromise = loadStripe('pk_test_51SsNe2DBPVs6GDkmnLZ2Q9tOqumPhuAeHd7CGsf9eJ55pSV0fJwwxmlm3KWnVopcaCux0FiBY7mLY7b72sUgxeuJ00ZTkcq36O');
+const stripePromise = loadStripe('pk_live_51SsNe2DBPVs6GDkm064tuvJs7kDMYG0G1Lr4BpbA2DACJricwZ6N89Pkvw8z0o6bBqB6cia30CPNIeKNtLSqBGM800j0D0TG1K');
 
 interface ShippingSettings {
   _id: string;
@@ -47,8 +50,21 @@ interface PaymentSettings {
 }
 
 // Stripe Payment Wrapper Component
-const StripePaymentWrapper = ({ orderId, orderNumber, amount, onPaymentSuccess }: { orderId: string; orderNumber: string; amount: number; onPaymentSuccess: (orderNumber: string) => void }) => {
+const StripePaymentWrapper = ({
+  orderId,
+  orderNumber,
+  amount,
+  email,
+  onPaymentSuccess,
+}: {
+  orderId: string;
+  orderNumber: string;
+  amount: number;
+  email: string;
+  onPaymentSuccess: (orderNumber: string) => void;
+}) => {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [displayAmount, setDisplayAmount] = useState<number>(amount);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -56,11 +72,19 @@ const StripePaymentWrapper = ({ orderId, orderNumber, amount, onPaymentSuccess }
       try {
         const response = await apiService.createPaymentIntent({
           orderId: orderId,
+          orderNumber,
+          email,
+          amount: Number(amount.toFixed(2)),
           currency: 'gbp'
         });
 
         if (response.success && response.data?.clientSecret) {
           setClientSecret(response.data.clientSecret);
+          const payable =
+            Number(response.data?.totalWithFees ?? response.data?.amount ?? amount);
+          if (Number.isFinite(payable)) {
+            setDisplayAmount(payable);
+          }
         } else {
           throw new Error(response.message || 'Failed to create payment intent');
         }
@@ -74,7 +98,7 @@ const StripePaymentWrapper = ({ orderId, orderNumber, amount, onPaymentSuccess }
     };
 
     createIntent();
-  }, [orderId, toast]);
+  }, [orderId, toast, amount]);
 
   if (!clientSecret) {
     return (
@@ -90,6 +114,7 @@ const StripePaymentWrapper = ({ orderId, orderNumber, amount, onPaymentSuccess }
     <Elements stripe={stripePromise} options={{ clientSecret }}>
       <StripePaymentForm
         amount={amount}
+        displayAmount={displayAmount}
         orderId={orderId}
         orderNumber={orderNumber}
         onPaymentSuccess={onPaymentSuccess}
@@ -99,14 +124,13 @@ const StripePaymentWrapper = ({ orderId, orderNumber, amount, onPaymentSuccess }
 };
 
 // Stripe Payment Form Component
-const StripePaymentForm = ({ amount, orderId, orderNumber, onPaymentSuccess }: { amount: number; orderId: string; orderNumber: string; onPaymentSuccess: (orderNumber: string) => void }) => {
+const StripePaymentForm = ({ amount, displayAmount, orderId, orderNumber, onPaymentSuccess }: { amount: number; displayAmount: number; orderId: string; orderNumber: string; onPaymentSuccess: (orderNumber: string) => void }) => {
   const stripe = useStripe();
   const elements = useElements();
   const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePaymentSubmit = async () => {
 
     if (!stripe || !elements) {
       return;
@@ -147,16 +171,17 @@ const StripePaymentForm = ({ amount, orderId, orderNumber, onPaymentSuccess }: {
   return (
     <Card className="bg-muted/30">
       <CardContent className="p-4">
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-4">
           <PaymentElement />
           <Button
-            type="submit"
+            type="button"
             disabled={!stripe || isProcessing}
             className="w-full bg-green-800 text-white hover:bg-green-900"
+            onClick={handlePaymentSubmit}
           >
-            {isProcessing ? "Processing..." : `Pay £${amount.toFixed(2)}`}
+            {isProcessing ? "Processing..." : `Pay £${displayAmount.toFixed(2)}`}
           </Button>
-        </form>
+        </div>
       </CardContent>
     </Card>
   );
@@ -176,6 +201,11 @@ export const CheckoutPage = () => {
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [stripeOrderId, setStripeOrderId] = useState<string | null>(null);
   const [stripeOrderNumber, setStripeOrderNumber] = useState<string | null>(null);
+  const [couponCode, setCouponCode] = useState("");
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponApplied, setCouponApplied] = useState(false);
+  const [couponDiscount, setCouponDiscount] = useState(0);
+  const [couponMessage, setCouponMessage] = useState<string | null>(null);
 
   // Saved addresses
   type SavedAddress = {
@@ -376,11 +406,11 @@ export const CheckoutPage = () => {
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
   const threshold = shippingSettings?.free_delivery_threshold ?? null;
   const isFreeShipping =
-    typeof threshold === 'number' && !Number.isNaN(threshold) && total >= threshold;
+    typeof threshold === 'number' && !Number.isNaN(threshold) && threshold > 0 && total >= threshold;
   const shippingCharge = isFreeShipping
     ? 0
     : (shippingSettings?.delivery_charges || 200);
-  const finalTotal = total + shippingCharge;
+  const finalTotal = Math.max(0, total + shippingCharge - (couponApplied ? couponDiscount : 0));
 
   const handleInputChange = (field: string, value: string | boolean) => {
     setFormData(prev => {
@@ -539,8 +569,6 @@ export const CheckoutPage = () => {
         email: formData.email,
         // REQUIRED: Order items array
         items: items.map(item => {
-          const baseVariantPrice = item.variant_price ?? item.product.price;
-
           // Get product ID - use productId or fallback to product._id
           const productId = item.productId || item.product._id;
 
@@ -555,12 +583,17 @@ export const CheckoutPage = () => {
             quantity: item.quantity  // REQUIRED: min 1, integer
           };
 
-          // OPTIONAL: Only include variant if it exists
-          if (item.variant_size) {
-            itemObj.variant = {
-              name: item.variant_size,
-              price: baseVariantPrice
-            };
+          // OPTIONAL: Only include variantId if it exists
+          if (item.variant_id) {
+            itemObj.variantId = item.variant_id;
+          }
+
+          if (item.productType === "bundle" || (item.bundleItems && item.bundleItems.length > 0)) {
+            itemObj.bundleItems = (item.bundleItems || []).map(bundleItem => ({
+              product: bundleItem.productId,
+              quantity: bundleItem.quantity,
+              ...(bundleItem.variant_id ? { variantId: bundleItem.variant_id } : {})
+            }));
           }
 
           return itemObj;
@@ -587,6 +620,10 @@ export const CheckoutPage = () => {
       // OPTIONAL: Only include notes if they exist
       if (formData.notes && formData.notes.trim()) {
         orderData.notes = formData.notes.trim();
+      }
+
+      if (couponApplied && couponCode.trim()) {
+        orderData.couponCode = couponCode.trim();
       }
 
       // For Stripe payments, create order first, then handle payment
@@ -684,6 +721,56 @@ export const CheckoutPage = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleValidateCoupon = async () => {
+    const code = couponCode.trim();
+    if (!code) {
+      toast({
+        title: "Coupon required",
+        description: "Please enter a coupon code to validate.",
+        variant: "destructive"
+      });
+      return;
+    }
+    setCouponLoading(true);
+    setCouponMessage(null);
+    try {
+      const response = await apiService.validateCoupon({
+        code,
+        subtotal: Number(total.toFixed(2))
+      });
+      if (!response.success) {
+        throw new Error(response.message || response.error || "Coupon validation failed");
+      }
+
+      const data = (response.data as any)?.data ?? response.data ?? {};
+      const isValid = data?.isValid ?? data?.valid ?? true;
+      if (!isValid) {
+        throw new Error(data?.message || "Coupon is not valid");
+      }
+
+      const discountValue =
+        Number(data?.discountAmount ?? data?.discount ?? data?.amount ?? data?.value ?? 0) || 0;
+      setCouponDiscount(discountValue);
+      setCouponApplied(true);
+      setCouponMessage(data?.message || "Coupon applied successfully.");
+      toast({
+        title: "Coupon applied",
+        description: data?.message || "Discount applied to your order."
+      });
+    } catch (error: any) {
+      setCouponApplied(false);
+      setCouponDiscount(0);
+      setCouponMessage(error?.message || "Coupon validation failed.");
+      toast({
+        title: "Invalid coupon",
+        description: error?.message || "Please check the coupon code.",
+        variant: "destructive"
+      });
+    } finally {
+      setCouponLoading(false);
     }
   };
 
@@ -983,6 +1070,7 @@ export const CheckoutPage = () => {
                         orderId={stripeOrderId}
                         orderNumber={stripeOrderNumber}
                         amount={finalTotal}
+                        email={formData.email}
                         onPaymentSuccess={(orderNumber) => {
                           setBypassEmptyCartRedirect(true);
                           clearCart();
@@ -1105,8 +1193,20 @@ export const CheckoutPage = () => {
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-gray-900">{item.product.name}</p>
+                              {(item.productType === "bundle" || item.bundleItems?.length) && (
+                                <p className="text-xs text-emerald-700">Bundle</p>
+                              )}
                               {item.variant_size && (
                                 <p className="text-xs text-gray-500">{item.variant_size}</p>
+                              )}
+                              {item.bundleItems && item.bundleItems.length > 0 && (
+                                <div className="mt-1 space-y-1 text-[11px] text-gray-500">
+                                  {item.bundleItems.map((bundleItem, index) => (
+                                    <div key={`${bundleItem.productId}-${index}`}>
+                                      {bundleItem.product?.name || "Item"}{bundleItem.variant_size ? ` (${bundleItem.variant_size})` : ""} × {bundleItem.quantity}
+                                    </div>
+                                  ))}
+                                </div>
                               )}
                             </div>
                             <div className="text-right">
@@ -1118,6 +1218,39 @@ export const CheckoutPage = () => {
                     </div>
 
                     <Separator />
+
+                    <div className="space-y-2">
+                      <Label htmlFor="coupon" className="text-sm">Coupon code</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="coupon"
+                          value={couponCode}
+                          onChange={(event) => {
+                            const next = event.target.value;
+                            setCouponCode(next);
+                            if (couponApplied) {
+                              setCouponApplied(false);
+                              setCouponDiscount(0);
+                              setCouponMessage(null);
+                            }
+                          }}
+                          placeholder="Enter coupon"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleValidateCoupon}
+                          disabled={couponLoading}
+                        >
+                          {couponLoading ? "Checking..." : "Validate"}
+                        </Button>
+                      </div>
+                      {couponMessage && (
+                        <p className={cn("text-xs", couponApplied ? "text-green-700" : "text-red-600")}>
+                          {couponMessage}
+                        </p>
+                      )}
+                    </div>
 
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
@@ -1132,6 +1265,12 @@ export const CheckoutPage = () => {
                           <span>£{formatCurrency(shippingCharge)}</span>
                         )}
                       </div>
+                      {couponApplied && couponDiscount > 0 && (
+                        <div className="flex justify-between text-sm text-green-700">
+                          <span>Coupon discount</span>
+                          <span>-£{formatCurrency(couponDiscount)}</span>
+                        </div>
+                      )}
                       <Separator />
                       <div className="flex justify-between font-semibold text-lg">
                         <span>Total</span>
