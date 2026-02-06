@@ -7,7 +7,6 @@ export const Footer = () => {
   const email = "info@phreshmcr.com"; // Always use info@phreshmcr.com
   const [subscribeEmail, setSubscribeEmail] = useState("");
   const [subscribeMsg, setSubscribeMsg] = useState<string | null>(null);
-  // (Blogs preview removed; showing a single link in Order Info instead)
 
   const handleSubscribe = () => {
     const valid = /.+@.+\..+/.test(subscribeEmail);
@@ -35,25 +34,6 @@ export const Footer = () => {
           <div className="space-y-4 flex flex-col items-center">
             <h3 className="text-lg font-semibold">ORDER INFO</h3>
             <div className="space-y-2 text-sm">
-              {<a
-                href="https://postex.pk/tracking"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block hover:text-primary transition-colors"
-              >
-                PostEx Order Tracking
-              </a>
-              /*<a
-                href="https://www.tcsexpress.com/track-shipment"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block hover:text-primary transition-colors"
-              >
-                TCS Order Tracking
-              </a>
-              <a href="#" className="block hover:text-primary transition-colors">
-                Return and Exchange
-              </a> */}
               <a
                 href="/terms"
                 className="block hover:text-green-200 transition-colors text-white/90"
@@ -66,12 +46,6 @@ export const Footer = () => {
               >
                 Privacy Policy
               </a>
-              <a
-                href="/refund-policy"
-                className="block hover:text-green-200 transition-colors text-white/90"
-              >
-                Refund & Exchange policy
-              </a>
               {/* <a href="#" className="block hover:text-primary transition-colors">
                 FAQs
               </a>
@@ -79,12 +53,6 @@ export const Footer = () => {
                 Our Outlets
               </a> */}
             </div>
-            <a
-              href="/blogs"
-              className="block hover:text-green-200 transition-colors text-white/90"
-            >
-              Blogs
-            </a>
           </div>
 
           {/* Sign Up */}
@@ -158,8 +126,8 @@ export const Footer = () => {
           <div className="space-y-4 flex flex-col items-center">
             <h3 className="text-lg font-semibold text-white">CHAT WITH US</h3>
             <div className="space-y-2 text-sm text-white/90">
-              <p>Monday - Saturday: 10am-10pm PST</p>
-              {/* <p>Sunday: 2pm - 11pm PST</p> */}
+              <p>Monday - Saturday: 10am-10pm GMT</p>
+              {/* <p>Sunday: 2pm - 11pm GMT</p> */}
               <p>Customer Support:</p>
               <a
                 href={`mailto:${email}`}
@@ -177,7 +145,7 @@ export const Footer = () => {
             </div>
           </div>
 
-          {/* Blogs section removed; link added under Order Info */}
+          {/* Additional links can be added here if needed */}
         </div>
 
         {/* Bottom Section */}

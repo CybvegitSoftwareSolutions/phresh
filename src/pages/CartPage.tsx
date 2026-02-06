@@ -31,7 +31,11 @@ export const CartPage = () => {
   const [authSheetOpen, setAuthSheetOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
 
-  const formatCurrency = (value: number) => Math.round(value).toLocaleString('en-IN');
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('en-GB', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(Number(value || 0));
 
   useEffect(() => {
     const fetchShippingSettings = async () => {

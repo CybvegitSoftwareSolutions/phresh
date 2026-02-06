@@ -115,7 +115,13 @@ export const OrderConfirmationPage = () => {
 
       // Map backend response structure to frontend format
       const shippingAddress = orderData.shippingAddress || {};
-      const customerEmail = orderData.guestEmail || orderData.shippingAddress?.email || '';
+      const customerEmail =
+        orderData.guestEmail ||
+        orderData.shippingAddress?.email ||
+        orderData.email ||
+        orderData.customer_email ||
+        orderData.customerEmail ||
+        '';
       
       // Build customer address string
       const addressParts = [
@@ -310,7 +316,11 @@ export const OrderConfirmationPage = () => {
 
   const formatCurrency = (value: number | string) => {
     const amount = Number(value) || 0;
-    return `£${Math.round(amount).toLocaleString('en-IN')}`;
+    const formatted = new Intl.NumberFormat('en-GB', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+    return `£${formatted}`;
   };
 
   const normalizedPaymentStatus = normalizePaymentStatus(paymentStatus);

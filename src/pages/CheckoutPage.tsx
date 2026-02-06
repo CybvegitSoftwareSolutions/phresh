@@ -224,6 +224,7 @@ export const CheckoutPage = () => {
   const [addressesLoading, setAddressesLoading] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<string>("new");
   const [originalAddress, setOriginalAddress] = useState<SavedAddress | null>(null);
+  const [country, setCountry] = useState("england");
 
   const [formData, setFormData] = useState({
     // Contact
@@ -400,7 +401,11 @@ export const CheckoutPage = () => {
     }
   };
 
-  const formatCurrency = (value: number) => Math.round(value).toLocaleString('en-IN');
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('en-GB', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(Number(value || 0));
 
   const total = getTotal();
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
@@ -495,7 +500,7 @@ export const CheckoutPage = () => {
             city: formData.city,
             state: formData.state || formData.city || "N/A", // Provide default if empty
             zipCode: formData.postalCode,
-            country: "Pakistan",
+            country: "England",
             is_default: savedAddresses.length === 0
           };
           const response = await apiService.addAddress(addressData);
@@ -606,7 +611,7 @@ export const CheckoutPage = () => {
           city: formData.city, // REQUIRED: 2-50 characters
           state: formData.state || formData.city || "N/A", // REQUIRED: 2-50 characters (use city or default if empty)
           zipCode: formData.postalCode || "00000", // REQUIRED: 3-10 characters (use default if empty)
-          country: "Pakistan", // OPTIONAL: default "Pakistan"
+          country: "England", // OPTIONAL: default "England"
           // OPTIONAL: Only include instructions if notes exist
           ...(formData.notes ? { instructions: formData.notes } : {})
         },
@@ -901,12 +906,12 @@ export const CheckoutPage = () => {
                     )}
                     <div>
                       <Label htmlFor="country">Country/Region</Label>
-                      <Select defaultValue="pakistan">
+                      <Select value={country} onValueChange={setCountry}>
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue placeholder="England" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="pakistan">Pakistan</SelectItem>
+                          <SelectItem value="england">England</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -948,6 +953,7 @@ export const CheckoutPage = () => {
                         id="city"
                         value={formData.city}
                         onChange={(e) => handleInputChange('city', e.target.value)}
+                        placeholder="e.g., London"
                         required
                       />
                     </div>
@@ -958,7 +964,7 @@ export const CheckoutPage = () => {
                         id="state"
                         value={formData.state}
                         onChange={(e) => handleInputChange('state', e.target.value)}
-                        placeholder="e.g., Sindh, Punjab, KPK"
+                        placeholder="e.g., Greater London, West Midlands"
                         required
                       />
                     </div>

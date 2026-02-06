@@ -837,6 +837,17 @@ class ApiService {
     return this.request('/api/carousel');
   }
 
+  // Instagram media (proxy from backend)
+  async getInstagramMedia(params: { limit?: number } = {}) {
+    const searchParams = new URLSearchParams();
+    if (params.limit !== undefined) {
+      searchParams.append('limit', String(params.limit));
+    }
+    const queryString = searchParams.toString();
+    const endpoint = queryString ? `/api/instagram/media?${queryString}` : '/api/instagram/media';
+    return this.request(endpoint);
+  }
+
   async createCarouselItem(carouselData: {
     title?: string;
     subtitle?: string;

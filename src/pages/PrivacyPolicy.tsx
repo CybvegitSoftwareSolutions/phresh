@@ -10,128 +10,118 @@ const PrivacyPolicy = () => {
 
         <div className="prose prose-lg max-w-none space-y-6">
           <section>
-            <h2 className="text-2xl font-semibold mb-4">1. Information We Collect</h2>
+            <h2 className="text-2xl font-semibold mb-4">1. Who We Are</h2>
             <p className="text-muted-foreground">
-              We collect information you provide directly to us when you create an account, make a purchase, or contact us.
+              This Privacy Policy explains how Phresh collects, uses, and protects your personal data. We operate in England, United Kingdom, and comply with the UK GDPR and the Data Protection Act 2018.
             </p>
-            <h3 className="text-xl font-medium mt-4 mb-2">Personal Information:</h3>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold mb-4">2. Information We Collect</h2>
+            <p className="text-muted-foreground">
+              We collect information you provide directly to us and information generated when you use our services.
+            </p>
             <ul className="list-disc list-inside space-y-2 text-muted-foreground">
-              <li>Name and contact information</li>
-              <li>Email address and phone number</li>
-              <li>Shipping and billing addresses</li>
-              <li>Payment information (processed securely)</li>
+              <li>Identity and contact details (name, email, phone)</li>
+              <li>Delivery and billing addresses</li>
               <li>Order history and preferences</li>
+              <li>Payment information (processed securely by our payment providers)</li>
+              <li>Technical data such as device and usage information</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4">2. How We Use Your Information</h2>
+            <h2 className="text-2xl font-semibold mb-4">3. How We Use Your Information</h2>
             <p className="text-muted-foreground">
-              We use the information we collect to:
+              We use your data to:
             </p>
             <ul className="list-disc list-inside mt-4 space-y-2 text-muted-foreground">
-              <li>Process and fulfill your orders</li>
-              <li>Send order confirmations and shipping notifications</li>
+              <li>Process and fulfil orders</li>
               <li>Provide customer support</li>
-              <li>Improve our products and services</li>
-              <li>Send promotional communications (with your consent)</li>
-              <li>Prevent fraud and enhance security</li>
+              <li>Send order updates and service communications</li>
+              <li>Improve our products and website</li>
+              <li>Send marketing communications when you opt in</li>
+              <li>Prevent fraud and maintain security</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4">3. Information Sharing</h2>
+            <h2 className="text-2xl font-semibold mb-4">4. Legal Bases for Processing</h2>
             <p className="text-muted-foreground">
-              We do not sell, trade, or rent your personal information to third parties. We may share your information only in the following circumstances:
+              We process personal data under one or more of the following legal bases:
             </p>
             <ul className="list-disc list-inside mt-4 space-y-2 text-muted-foreground">
-              <li>With shipping partners to deliver your orders</li>
-              <li>With payment processors to handle transactions</li>
-              <li>When required by law or legal process</li>
-              <li>To protect our rights and prevent fraud</li>
-              <li>With your explicit consent</li>
+              <li>Performance of a contract (to fulfil your order)</li>
+              <li>Legal obligation (e.g., tax and accounting rules)</li>
+              <li>Legitimate interests (service improvement and security)</li>
+              <li>Consent (for marketing, where required)</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4">4. Data Security</h2>
+            <h2 className="text-2xl font-semibold mb-4">5. Sharing Your Information</h2>
             <p className="text-muted-foreground">
-              We implement appropriate security measures to protect your personal information:
+              We do not sell your personal data. We may share it with trusted service providers that help us run our business, such as:
             </p>
             <ul className="list-disc list-inside mt-4 space-y-2 text-muted-foreground">
-              <li>SSL encryption for data transmission</li>
-              <li>Secure servers and databases</li>
-              <li>Regular security audits and updates</li>
-              <li>Limited access to personal information</li>
-              <li>Employee privacy training</li>
+              <li>Payment processors</li>
+              <li>Delivery and logistics partners</li>
+              <li>Website hosting and analytics providers</li>
+              <li>Professional advisers where required</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4">5. Cookies and Tracking</h2>
+            <h2 className="text-2xl font-semibold mb-4">6. International Transfers</h2>
             <p className="text-muted-foreground">
-              We use cookies and similar technologies to enhance your browsing experience:
-            </p>
-            <ul className="list-disc list-inside mt-4 space-y-2 text-muted-foreground">
-              <li>Remember your preferences and login status</li>
-              <li>Analyze website traffic and usage patterns</li>
-              <li>Provide personalized content and recommendations</li>
-              <li>Enable social media features</li>
-            </ul>
-            <p className="text-muted-foreground mt-4">
-              You can control cookie settings through your browser preferences.
+              If we transfer personal data outside the UK, we use appropriate safeguards to protect your data in line with UK GDPR.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4">6. Your Rights</h2>
+            <h2 className="text-2xl font-semibold mb-4">7. Data Retention</h2>
             <p className="text-muted-foreground">
-              You have the right to:
-            </p>
-            <ul className="list-disc list-inside mt-4 space-y-2 text-muted-foreground">
-              <li>Access your personal information</li>
-              <li>Update or correct your information</li>
-              <li>Request deletion of your data</li>
-              <li>Opt-out of marketing communications</li>
-              <li>Withdraw consent for data processing</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold mb-4">7. Third-Party Links</h2>
-            <p className="text-muted-foreground">
-              Our website may contain links to third-party websites. We are not responsible for the privacy practices of these external sites. We encourage you to review their privacy policies.
+              We keep personal data only as long as necessary for the purposes described in this policy, including legal, accounting, or reporting requirements.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4">8. Children's Privacy</h2>
+            <h2 className="text-2xl font-semibold mb-4">8. Your Rights</h2>
             <p className="text-muted-foreground">
-              Our services are not intended for children under 13. We do not knowingly collect personal information from children under 13 years of age.
+              You have rights under UK data protection law, including the right to access, correct, erase, restrict, object to processing, and data portability. You can also withdraw consent at any time where processing is based on consent.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4">9. Policy Updates</h2>
+            <h2 className="text-2xl font-semibold mb-4">9. Cookies</h2>
             <p className="text-muted-foreground">
-              We may update this privacy policy from time to time. We will notify you of any significant changes by posting the new policy on our website and updating the "last updated" date.
+              We use cookies and similar technologies to improve site functionality and understand usage. You can control cookies through your browser settings.
             </p>
           </section>
 
           <section>
             <h2 className="text-2xl font-semibold mb-4">10. Contact Us</h2>
             <p className="text-muted-foreground">
-              If you have any questions about this privacy policy or our data practices, please contact us:
+              For questions about this policy or your data, contact us at:
             </p>
             <div className="mt-4 space-y-2 text-muted-foreground">
               <p>Email: info@phreshmcr.com</p>
-              <p>Phone: 03020025727</p>
-              <p>Address: Pakistan</p>
+              <p>Address: England, United Kingdom</p>
             </div>
+            <p className="text-muted-foreground mt-4">
+              You also have the right to lodge a complaint with the UK Information Commissioner's Office (ICO).
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold mb-4">11. Policy Updates</h2>
+            <p className="text-muted-foreground">
+              We may update this policy from time to time. Any changes will be posted here with an updated date.
+            </p>
           </section>
 
           <p className="text-sm text-muted-foreground mt-8">
-            Last updated: January 2025
+            Last updated: February 4, 2026
           </p>
         </div>
       </main>

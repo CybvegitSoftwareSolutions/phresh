@@ -75,6 +75,15 @@ interface CarouselItem {
   video_url?: string | null;
 }
 
+interface InstagramMedia {
+  id: string;
+  media_url: string;
+  permalink: string;
+  caption?: string | null;
+  media_type?: "IMAGE" | "VIDEO" | "CAROUSEL_ALBUM";
+  thumbnail_url?: string | null;
+}
+
 interface Category {
   id: string;
   name: string;
@@ -105,6 +114,8 @@ export const HomePage = () => {
   const [activeBundleProduct, setActiveBundleProduct] = useState<Product | null>(null);
   const [bundleAllowedProducts, setBundleAllowedProducts] = useState<BundleAllowedProduct[]>([]);
   const [bundleSelections, setBundleSelections] = useState<Record<string, BundleSelection>>({});
+  const [instagramMedia, setInstagramMedia] = useState<InstagramMedia[]>([]);
+  const [instagramLoading, setInstagramLoading] = useState(false);
   const { addToCart, items, updateQuantity, removeFromCart } = useCart();
   const { user } = useAuth();
   const location = useLocation();
@@ -112,6 +123,10 @@ export const HomePage = () => {
   useEffect(() => {
     loadData();
   }, [selectedCategoryId, sortBy]);
+
+  useEffect(() => {
+    void loadInstagramMedia();
+  }, []);
 
   // Scroll to top on mount and when location changes
   useEffect(() => {
@@ -275,6 +290,33 @@ export const HomePage = () => {
       console.error("❌ Error loading homepage data:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadInstagramMedia = async () => {
+    try {
+      setInstagramLoading(true);
+      const response = await apiService.getInstagramMedia({ limit: 4 });
+      const responseData: any = response as any;
+      const payload = responseData?.data ?? responseData;
+      const items = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
+      if (items.length > 0) {
+        const mapped = items
+          .map((item: any) => ({
+            id: item.id || item._id,
+            media_url: item.media_url,
+            permalink: item.permalink,
+            caption: item.caption ?? null,
+            media_type: item.media_type,
+            thumbnail_url: item.thumbnail_url ?? null,
+          }))
+          .filter((item: InstagramMedia) => Boolean(item.media_url && item.permalink));
+        setInstagramMedia(mapped);
+      }
+    } catch (error) {
+      console.error("Failed to load Instagram media:", error);
+    } finally {
+      setInstagramLoading(false);
     }
   };
 
@@ -1118,6 +1160,7 @@ export const HomePage = () => {
             </section>
 
       {/* Community in Action Section - with bgWhite.png background */}
+      {/*
       <section 
         className="py-16 md:py-24 relative"
         style={{
@@ -1132,20 +1175,50 @@ export const HomePage = () => {
             <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">Community in Action</h2>
             <p className="text-xl text-gray-600 mb-8">Fresh, Healthy, Together</p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="aspect-square bg-gray-200 rounded-lg overflow-hidden">
-                  <div className="w-full h-full flex items-center justify-center text-gray-400">
-                    <Instagram className="h-12 w-12" />
+              {instagramMedia.length > 0 ? (
+                instagramMedia.slice(0, 4).map((post) => {
+                  const imageUrl =
+                    post.media_type === "VIDEO"
+                      ? post.thumbnail_url || post.media_url
+                      : post.media_url;
+                  return (
+                    <a
+                      key={post.id}
+                      href={post.permalink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="group block aspect-square bg-gray-200 rounded-lg overflow-hidden relative"
+                    >
+                      <img
+                        src={imageUrl}
+                        alt={post.caption ? post.caption : "Instagram post"}
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </a>
+                  );
+                })
+              ) : (
+                [1, 2, 3, 4].map((i) => (
+                  <div
+                    key={i}
+                    className={`aspect-square bg-gray-200 rounded-lg overflow-hidden ${instagramLoading ? "animate-pulse" : ""}`}
+                  >
+                    <div className="w-full h-full flex items-center justify-center text-gray-400">
+                      <Instagram className="h-12 w-12" />
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
             <p className="text-gray-600">
-              Tag us <span className="font-semibold text-primary">@phresh</span> to be featured!
+              Tag us <span className="font-semibold text-primary">@phreshmcr</span> to be featured!
             </p>
           </div>
         </div>
       </section>
+      */}
 
       {/* Variant Selection Sheet */}
       <Sheet open={variantSheetOpen} onOpenChange={handleVariantSheetChange}>
