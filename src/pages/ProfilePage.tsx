@@ -220,7 +220,7 @@ export const ProfilePage = () => {
           city: profileForm.address.split(',')[1]?.trim() || '',
           state: profileForm.address.split(',')[2]?.trim() || '',
           zipCode: profileForm.address.split(',')[3]?.trim() || '',
-          country: profileForm.address.split(',')[4]?.trim() || 'Pakistan'
+          country: profileForm.address.split(',')[4]?.trim() || 'United Kingdom'
         } : undefined
       };
 
